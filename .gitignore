@@ -51,6 +51,12 @@ code-atlas.service
 !config/notifications_config.json.example
 !code-atlas.service.example
 
+# Machine-specific / internal names (use *.example; copy locally after clone)
+config/services_mapping.json
+config/skip_repos.json
+!config/services_mapping.json.example
+!config/skip_repos.json.example
+
 # Vector DB + local index state (large; may reflect proprietary code)
 data/
 

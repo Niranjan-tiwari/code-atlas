@@ -1,24 +1,24 @@
 {
   "tasks": [
     {
-      "repo_name": "whatsapp_wrapper",
+      "repo_name": "example-java-api",
       "task_id": "add-logging",
       "description": "Add structured logging to message processing",
       "branch_name": "feature/add-logging",
       "continue_on_existing": true,
       "files_to_modify": [
-        "src/main/java/com/smartech/whatsappapi/service/MessageService.java"
+        "src/main/java/com/example/api/MessageService.java"
       ],
       "changes": {
         "MessageService.java": "Add log statements for message processing"
       },
       "code_changes": {
-        "src/main/java/com/smartech/whatsappapi/service/MessageService.java": "// Add logging\nimport org.slf4j.Logger;\nimport org.slf4j.LoggerFactory;\n\nprivate static final Logger logger = LoggerFactory.getLogger(MessageService.class);\n\n// In sendMessage method:\nlogger.info(\"Processing message: {}\", messageRequests.getMessageId());"
+        "src/main/java/com/example/api/MessageService.java": "// Add logging\nimport org.slf4j.Logger;\nimport org.slf4j.LoggerFactory;\n\nprivate static final Logger logger = LoggerFactory.getLogger(MessageService.class);\n\n// In sendMessage method:\nlogger.info(\"Processing message: {}\", messageRequests.getMessageId());"
       },
       "commit_message": "feat: add structured logging to message processing"
     },
     {
-      "repo_name": "go_tps_message_dequer",
+      "repo_name": "example-go-worker",
       "task_id": "add-metrics",
       "description": "Add Prometheus metrics",
       "branch_name": "feature/add-metrics",
@@ -35,7 +35,7 @@
       "commit_message": "feat: add Prometheus metrics"
     },
     {
-      "repo_name": "whatsapp-segregator",
+      "repo_name": "example-go-service",
       "task_id": "improve-error-handling",
       "description": "Improve error handling in segregation logic",
       "branch_name": null,

@@ -8,6 +8,8 @@
 | **API keys** | Never commit. Use `export OPENAI_API_KEY=...`, GitHub **Actions secrets**, or **Dependabot**-style secret scanning. |
 | **`GITLAB_TOKEN`** | Environment variable or CI secret only. |
 | **`repos_config.json`** | Lists internal clone URLs — kept out of git via `.gitignore`. Use `repos_config.json.example`. |
+| **`services_mapping.json`** | Was a full systemd dump (RMM, remote desktop, etc.) — **must not** be committed. Use `services_mapping.json.example`; real file is gitignored. |
+| **`skip_repos.json`** | Can contain internal repo names — gitignored; use `skip_repos.json.example`. |
 | **`data/vector_db`** | Large + may embed code; ignored. Each clone rebuilds index. |
 | **Personal paths** (`/home/you/...`) | Use `config.json.example` as template. |
 
@@ -20,14 +22,17 @@ After pulling:
 ```bash
 cp config/config.json.example config/config.json
 cp config/notifications_config.json.example config/notifications_config.json
+cp config/services_mapping.json.example config/services_mapping.json
+cp config/skip_repos.json.example config/skip_repos.json
 # optional: cp code-atlas.service.example /etc/systemd/system/your-worker.service
 ```
 
 ## First-time push checklist
 
-1. `git status` — confirm no `config.json`, `*.log`, `data/vector_db`, or tokens.
-2. Optional: `git log -p -- config/config.json` — if this file was ever committed, **rotate Slack webhook** and consider `git filter-repo` / BFG to purge history before open-sourcing.
-3. Create empty repo on GitHub with your chosen name → add remote → push.
+1. `./scripts/check-before-github-push.sh` — optional automated check.
+2. `git status` — confirm no `config.json`, `services_mapping.json`, `skip_repos.json`, `*.log`, `data/vector_db`, or tokens.
+3. Optional: `git log -p -- config/config.json` — if this file was ever committed, **rotate Slack webhook** and consider `git filter-repo` / BFG to purge history before open-sourcing.
+4. Create empty repo on GitHub with your chosen name → add remote → push.
 
 ## Suggested GitHub repo name
 

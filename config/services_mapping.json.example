@@ -1,0 +1,13 @@
+{
+  "services": [
+    {
+      "service_name": "redis",
+      "file_path": "/etc/systemd/system/redis.service",
+      "working_directory": null,
+      "exec_start": "/usr/bin/redis-server /etc/redis/redis.conf --supervised systemd --daemonize no"
+    }
+  ],
+  "mapping": {
+    "redis": "your_repo_alias_for_redis_bridge"
+  }
+}
