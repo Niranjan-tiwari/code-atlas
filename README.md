@@ -1,6 +1,24 @@
 # Code Atlas
 
-AI-powered tool for managing parallel work across multiple GitLab repositories. Search code semantically, auto-review PRs, generate docs, find duplicates, debug errors, and automate Git operations across 70+ repos.
+**Multi-repo developer platform:** semantic code search over many Git repositories (ChromaDB + RAG), multi-provider LLMs (OpenAI, Anthropic, Gemini, Ollama), parallel Git/GitLab task automation, REST API, and a local web dashboard.
+
+---
+
+## About
+
+| | |
+|--|--|
+| **What it does** | Index code from multiple clones, **search & ask questions** with retrieval + optional LLM, run **batch Git operations** (branches, MRs) across repos, and expose tools via **HTTP API** (`scripts/start_api.py`). |
+| **Stack** | Python 3.10+, **ChromaDB**, LangChain-related deps, **httpx**/requests, optional **Ollama** for local models. |
+| **Typical use** | Organizations with **many microservices** on **GitLab** (or mixed remotes) who want one place to explore code and automate repetitive repo changes. |
+| **Status** | Personal / portfolio project — configure via `config/*.example` files; secrets stay **out of git** (see [`.gitignore`](.gitignore)). |
+
+### GitHub “About” box (sidebar on your repo)
+
+That short blurb is edited on GitHub, not in a file: open your repo → **⚙ Settings** → **General** → set **Description**, **Website** (optional), and **Topics**.  
+Copy-paste suggestions live in [`.github/ABOUT-github-ui.md`](.github/ABOUT-github-ui.md).
+
+---
 
 ## Quick Start
 
