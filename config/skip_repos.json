@@ -1,0 +1,27 @@
+{
+  "skipped_repos": [
+    {
+      "repo_name": "smartech-whatsapp-api",
+      "reason": "Too large (265 Java files) - causes memory thrashing and system freeze",
+      "skipped_at": "2026-02-08 03:22",
+      "files_count": 265,
+      "language": "java",
+      "status": "pending",
+      "note": "Process separately with smaller batch size or on a machine with more RAM"
+    },
+    {
+      "repo_name": "wa-message-dequers",
+      "reason": "Too large (266 Java files) - may cause memory issues",
+      "skipped_at": "2026-02-08 03:24",
+      "files_count": 266,
+      "language": "java",
+      "status": "pending",
+      "note": "Process separately with smaller batch size"
+    }
+  ],
+  "notes": [
+    "Repos in this list are skipped during bulk indexing due to resource constraints",
+    "These repos can be indexed separately with optimized settings",
+    "Add repos here if they cause system freezes or excessive memory usage"
+  ]
+}

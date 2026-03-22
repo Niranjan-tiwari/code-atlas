@@ -1,0 +1,15 @@
+{
+  "enabled": false,
+  "phone_number": "",
+  "method": "custom",
+  "api_url": "https://api.whatsapp.com/send",
+  "api_key": "",
+  "from_number": "",
+  "send_on_success": true,
+  "send_on_failure": true,
+  "send_on_completion": true,
+  "slack": {
+    "enabled": false,
+    "webhook_url": "PASTE_SLACK_INCOMING_WEBHOOK_URL_HERE"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "work_mode": "simple_task",
+  "base_path": "/path/to/your/repos/root",
+  "additional_base_paths": [],
+  "base_paths_config": [
+    {
+      "path": "/path/to/your/repos/root",
+      "default_branch": "main"
+    }
+  ],
+  "max_workers": 5,
+  "remote": "origin",
+  "log_level": "INFO",
+  "log_file": "logs/worker.log",
+  "check_interval": 60,
+  "auto_discover_repos": true,
+  "parallel_execution": {
+    "max_workers": 5,
+    "max_workers_per_repo": 1,
+    "enable_agent_pool": false,
+    "agent_pool_size": 5
+  },
+  "notifications": {
+    "enabled": false,
+    "fallback_enabled": false,
+    "slack": {
+      "enabled": false,
+      "webhook_url": "PASTE_SLACK_INCOMING_WEBHOOK_URL_HERE"
+    },
+    "whatsapp": {
+      "enabled": false,
+      "phone_number": ""
+    }
+  },
+  "security": {
+    "enabled": true,
+    "rate_limit": {
+      "enabled": true,
+      "max_requests": 10,
+      "window_seconds": 60
+    },
+    "protected_branches": ["main", "master", "production", "prod"]
+  }
+}

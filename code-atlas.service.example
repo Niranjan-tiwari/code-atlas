@@ -1,0 +1,18 @@
+[Unit]
+Description=Code Atlas — multi-repo worker daemon
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_LINUX_USER
+WorkingDirectory=/path/to/code-atlas
+ExecStart=/usr/bin/python3 -m src.cli.daemon
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+Environment="PYTHONPATH=/path/to/code-atlas"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+work_log.json
+parallel_work_log.json
+
+# Config (keep examples, ignore actual configs with secrets / internal URLs)
+config/repos_config.json
+config/tasks_config.json
+config/config.json
+config/notifications_config.json
+code-atlas.service
+!config/repos_config.json.example
+!config/tasks_config.json.example
+!config/config.json.example
+!config/notifications_config.json.example
+!code-atlas.service.example
+
+# Vector DB + local index state (large; may reflect proprietary code)
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+
+# Temporary files
+*.tmp
+*.bak
+*.backup

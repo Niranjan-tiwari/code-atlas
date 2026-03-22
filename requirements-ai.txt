@@ -1,0 +1,67 @@
+# AI & ML Dependencies (Latest 2024/2025)
+# Install with: pip install -r requirements-ai.txt
+
+# LangChain - Core framework (Latest)
+langchain>=0.1.0
+langchain-community>=0.0.20
+langchain-core>=0.1.0
+langchain-openai>=0.0.5
+langchain-chroma>=0.1.0
+
+# Vector Database
+chromadb>=0.4.22
+
+# Observability (LangChain's tool)
+langsmith>=0.0.80
+
+# LLM Providers (Multi-Model Support)
+openai>=1.12.0              # OpenAI (GPT-4, GPT-3.5)
+anthropic>=0.18.0           # Claude (Sonnet, Opus, Haiku)
+google-generativeai>=0.3.0  # Gemini (Pro, Ultra)
+
+# LangChain Provider Integrations
+langchain-anthropic>=0.1.0  # Claude integration
+langchain-google-genai>=0.0.5  # Gemini integration (when available)
+
+# Embeddings
+tiktoken>=0.5.0
+
+# Text Processing
+tqdm>=4.66.0
+
+# Optional: Local LLM support
+# transformers>=4.36.0
+# torch>=2.1.0
+# llama-cpp-python>=0.2.0
+
+# Ollama support (local LLM, no API keys needed)
+requests>=2.31.0  # Already included, but needed for Ollama HTTP API
+
+# Advanced RAG Dependencies (2026 Upgrades)
+# AST-based chunking
+tree-sitter>=0.20.0
+
+# Reranking (Cross-encoder)
+# FlashRank: ultra-fast, ~4MB, CPU-friendly, no PyTorch (default)
+flashrank>=0.2.0
+# BGE reranker fallback (needs sentence-transformers)
+sentence-transformers>=2.2.0
+
+# Advanced embeddings
+# jina-embeddings-v2-base-code (via sentence-transformers)
+# CodeBERT (via transformers - already optional above)
+
+# BM25 hybrid search (built-in, no extra deps)
+
+# GraphRAG (built-in, no extra deps)
+
+# --- Production RAG Infrastructure ---
+
+# Caching (L2 persistent cache)
+# redis>=5.0.0  # Optional: only needed if Redis is available
+
+# Incremental indexing (file watcher)
+watchdog>=3.0.0
+
+# Monitoring (optional Prometheus client)
+# prometheus-client>=0.20.0  # Optional: for /metrics endpoint

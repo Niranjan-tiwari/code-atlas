@@ -1,0 +1,29 @@
+# Code Atlas Dependencies
+
+# Core dependencies
+# Python 3.8+ required
+
+# HTTP requests for WhatsApp notifications and API calls
+requests>=2.31.0
+
+# Optional: For enhanced logging (if needed)
+# colorlog>=6.7.0
+
+# Optional: For configuration validation (if needed)
+# pydantic>=2.0.0
+
+# Optional: For testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Optional: For development
+# black>=23.0.0
+# flake8>=6.0.0
+# mypy>=1.5.0
+
+# Optional: For WhatsApp Business API (Meta)
+# requests already included above
+
+# Optional: For Twilio WhatsApp
+# Use: pip install twilio (if using Twilio)
+# twilio>=8.0.0

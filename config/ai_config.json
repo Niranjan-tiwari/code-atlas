@@ -1,0 +1,90 @@
+{
+  "llm": {
+    "default_model": "openai",
+    "fallback_chain": ["ollama", "openai", "anthropic", "gemini"],
+    "strategy": {
+      "code_generation": "openai",
+      "code_review": "anthropic",
+      "documentation": "anthropic",
+      "simple": "gemini",
+      "cost_optimization": true,
+      "quality_threshold": 0.8
+    },
+    "openai": {
+      "enabled": true,
+      "model": "gpt-4o-mini"
+    },
+    "claude": {
+      "enabled": true,
+      "model": "claude-3-5-sonnet-20241022"
+    },
+    "gemini": {
+      "enabled": true,
+      "model": "gemini-2.0-flash"
+    },
+    "ollama": {
+      "enabled": true,
+      "base_url": "http://localhost:11434",
+      "model": "codellama"
+    }
+  },
+  "vector_db": {
+    "provider": "chromadb",
+    "persist_directory": "./data/vector_db",
+    "collection_name": "code_snippets"
+  },
+  "rag": {
+    "chunk_size": 1000,
+    "chunk_overlap": 200,
+    "top_k": 5,
+    "similarity_threshold": 0.7
+  },
+  "query_engine": {
+    "default_temperature": 0.3,
+    "max_tokens": 4000,
+    "max_context_length": 6000,
+    "include_history": true
+  },
+  "cache": {
+    "enabled": true,
+    "l1_max_size": 500,
+    "redis": {
+      "enabled": false,
+      "host": "localhost",
+      "port": 6379,
+      "db": 0
+    },
+    "ttl": {
+      "embedding": 86400,
+      "query": 3600,
+      "hyde": 7200,
+      "search": 1800
+    }
+  },
+  "hybrid_search": {
+    "auto_weight": true,
+    "default_bm25_weight": 0.3,
+    "default_vector_weight": 0.7,
+    "use_rrf": false
+  },
+  "incremental_indexer": {
+    "enabled": true,
+    "batch_interval_seconds": 5,
+    "state_file": "data/index_state.json"
+  },
+  "streaming": {
+    "enabled": true,
+    "sse_endpoint": "/api/search/stream"
+  },
+  "monitoring": {
+    "enabled": true,
+    "feedback_file": "data/user_feedback.jsonl",
+    "metrics_file": "data/rag_metrics.json"
+  },
+  "ab_testing": {
+    "enabled": false,
+    "experiments_file": "data/ab_experiments.json",
+    "min_queries_per_variant": 100,
+    "significance_threshold": 0.05
+  }
+}

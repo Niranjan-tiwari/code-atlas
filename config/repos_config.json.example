@@ -1,0 +1,20 @@
+{
+  "repos": [
+    {
+      "name": "example-api",
+      "local_path": "example-api",
+      "gitlab_url": "https://gitlab.com/your-org/example-api.git",
+      "source_branch": "main",
+      "component": "backend",
+      "description": "Replace with your real repo — copy to repos_config.json (gitignored)"
+    },
+    {
+      "name": "example-worker",
+      "local_path": "example-worker",
+      "gitlab_url": "https://gitlab.com/your-org/example-worker.git",
+      "source_branch": "main",
+      "component": "worker",
+      "description": "Second example entry"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "jira_id": "CPASS-1234",
+  "description": "Add health check endpoint",
+  "branch_name": "feature/CPASS-1234-health-check",
+  "branch_only": true,
+  "delete_branch_first": false,
+  "repos": [
+    "whatsapp",
+    "wa-payment-polling",
+    "go-rcs-reporting",
+    "deflector-go-reporting",
+    "wa-reporting-early-cache-setter"
+  ],
+  "base_paths": [
+    "/path/to/your/repos",
+    "/path/to/your/repos-alt"
+  ],
+  "_note": "source_branch is auto-detected from config rules: whatsapp repos -> master, rcs repos -> main"
+}
