@@ -40,6 +40,8 @@ mkdir -p logs data
 cp config/config.json.example config/config.json
 cp config/notifications_config.json.example config/notifications_config.json
 cp config/repos_config.json.example config/repos_config.json   # edit URLs/paths for your GitLab
+cp config/services_mapping.json.example config/services_mapping.json   # optional; for discover_services / mappings
+cp config/skip_repos.json.example config/skip_repos.json   # optional; repos to skip when bulk indexing
 ```
 
 Edit `config/config.json`: set `base_path` / `additional_base_paths` to directories where your repos are cloned.
