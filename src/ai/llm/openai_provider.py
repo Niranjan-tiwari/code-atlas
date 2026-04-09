@@ -3,11 +3,11 @@ OpenAI LLM Provider
 Supports GPT-4, GPT-4o, GPT-3.5-turbo
 """
 
-import os
 import logging
 from typing import Optional
 
 from .base import BaseLLMProvider, LLMResponse
+from .env_keys import OPENAI, from_env
 
 
 class OpenAIProvider(BaseLLMProvider):
@@ -25,7 +25,7 @@ class OpenAIProvider(BaseLLMProvider):
     }
     
     def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
+        self.api_key = api_key or from_env(OPENAI)
         self.model = model
         self.logger = logging.getLogger("openai_provider")
         self._client = None

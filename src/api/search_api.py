@@ -14,11 +14,22 @@ import signal
 import socket
 import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 import threading
 from typing import Optional
 
 logger = logging.getLogger("search_api")
+
+
+def _load_dotenv_from_repo_root() -> None:
+    """Load repo-root `.env` like `scripts/query_code.py` (does not override existing env)."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    root = Path(__file__).resolve().parent.parent.parent
+    load_dotenv(root / ".env", override=False)
 
 
 class SearchAPIHandler(BaseHTTPRequestHandler):
@@ -592,6 +603,16 @@ def _pids_listening_on_port(port: int) -> list[int]:
         return []
 
 
+def _try_bind_server(host: str, port: int) -> Optional[HTTPServer]:
+    """Return a bound ReusableHTTPServer, or None if errno 98 (address in use)."""
+    try:
+        return ReusableHTTPServer((host, port), SearchAPIHandler)
+    except OSError as e:
+        if getattr(e, "errno", None) == 98 or e.errno == 98:
+            return None
+        raise
+
+
 def _kill_process_on_port(port: int, *, force: bool = False) -> bool:
     """
     Stop processes listening on *port*.
@@ -614,10 +635,23 @@ def _kill_process_on_port(port: int, *, force: bool = False) -> bool:
     return True
 
 
-def start_search_api(host="0.0.0.0", port=8888):
-    """Start the fast search API server with graceful shutdown."""
+def start_search_api(
+    host: str = "0.0.0.0",
+    port: int = 8765,
+    *,
+    strict_port: bool = False,
+    port_fallback: int = 32,
+):
+    """Start the fast search API server with graceful shutdown.
+
+    If *port* is busy and cannot be cleared (e.g. listener owned by root or another
+    user), and *strict_port* is False, binds to the next free port in
+    ``port+1 .. port+port_fallback`` instead of exiting.
+    """
     import sys
-    sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent.parent))
+
+    _load_dotenv_from_repo_root()
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
     from src.ai.rag import RAGRetriever
 
@@ -625,33 +659,55 @@ def start_search_api(host="0.0.0.0", port=8888):
     retriever = RAGRetriever(persist_directory="./data/qdrant_db")
     SearchAPIHandler.retriever = retriever
 
-    # Try to bind; if port is busy, stop stale listeners and retry (TERM then KILL)
+    preferred = port
     server = None
+    used_port = preferred
+
+    # Phase A: preferred port — retry after SIGTERM/SIGKILL (only works for same-user PIDs)
     for attempt in range(5):
-        try:
-            server = ReusableHTTPServer((host, port), SearchAPIHandler)
+        server = _try_bind_server(host, preferred)
+        if server is not None:
             break
-        except OSError as e:
-            if e.errno != 98:  # Address already in use
-                raise
-            if attempt >= 4:
+        if attempt >= 4:
+            break
+        force = attempt >= 2
+        print(
+            f"Port {preferred} is in use — {'force-killing' if force else 'stopping'} stale listener(s)...",
+            flush=True,
+        )
+        _kill_process_on_port(preferred, force=force)
+        if not _pids_listening_on_port(preferred):
+            time.sleep(0.3)
+
+    # Phase B: cannot free preferred port (e.g. PermissionError on kill) — scan upward
+    if server is None and not strict_port:
+        print(
+            f"\n⚠️  Could not bind {host}:{preferred} (still in use). "
+            f"If another user or root holds the port, run:\n"
+            f"     sudo fuser -k {preferred}/tcp\n"
+            f"   Or:  python3 scripts/start_api.py --port 9000\n"
+            f"   Trying ports {preferred + 1}–{preferred + port_fallback}...\n",
+            flush=True,
+        )
+        for candidate in range(preferred + 1, preferred + 1 + port_fallback):
+            server = _try_bind_server(host, candidate)
+            if server is not None:
+                used_port = candidate
                 print(
-                    f"\nPort {port} is still in use after cleanup attempts.\n"
-                    f"  Run:  fuser -k {port}/tcp   or   lsof -i :{port}\n"
-                    f"  Or start on another port:  python3 scripts/start_api.py --port 8890\n",
+                    f"✅ Listening on http://{host}:{used_port} "
+                    f"(preferred {preferred} was unavailable)\n",
                     flush=True,
                 )
-                raise
-            force = attempt >= 2
-            print(
-                f"Port {port} is in use — {'force-killing' if force else 'stopping'} stale listener(s)...",
-                flush=True,
-            )
-            _kill_process_on_port(port, force=force)
-            if not _pids_listening_on_port(port):
-                time.sleep(0.3)
+                break
 
-    assert server is not None
+    if server is None:
+        print(
+            f"\n❌ No free port in range {preferred}–{preferred + port_fallback}.\n"
+            f"   Inspect:  sudo ss -tlnp | grep ':{preferred}'\n"
+            f"   Free:     sudo fuser -k {preferred}/tcp\n",
+            flush=True,
+        )
+        raise SystemExit(1)
 
     # Graceful shutdown on SIGINT / SIGTERM
     def _shutdown(signum, frame):
@@ -662,7 +718,7 @@ def start_search_api(host="0.0.0.0", port=8888):
     signal.signal(signal.SIGINT, _shutdown)
     signal.signal(signal.SIGTERM, _shutdown)
 
-    print(f"API server running on http://{host}:{port}", flush=True)
+    print(f"API server running on http://{host}:{used_port}", flush=True)
     print(f"  GET  /api/search?q=reporting", flush=True)
     print(f"  GET  /api/repos", flush=True)
     print(f"  POST /api/query  {{\"query\": \"...\"}}", flush=True)

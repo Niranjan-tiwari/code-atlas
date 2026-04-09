@@ -3,7 +3,6 @@ Multi-Model LLM Manager
 Routes requests to the best available model with fallback support
 """
 
-import os
 import json
 import logging
 from typing import Dict, List, Optional
@@ -15,6 +14,15 @@ from .anthropic_provider import AnthropicProvider
 from .gemini_provider import GeminiProvider
 from .ollama_provider import OllamaProvider
 from .groq_provider import GroqProvider
+from .env_keys import (
+    ANTHROPIC,
+    GEMINI,
+    GROQ,
+    OPENAI,
+    explicit_provider_setup_hint,
+    from_env,
+    no_providers_runtime_message,
+)
 
 
 class LLMManager:
@@ -50,10 +58,10 @@ class LLMManager:
             except Exception as e:
                 self.logger.warning(f"Error loading config: {e}")
         
-        # Groq (env GROQ_API_KEY) — register before others when key present
+        # Groq — register before others when key present
         groq_cfg = config.get("groq", {})
         if groq_cfg.get("enabled", True):
-            groq_key = os.environ.get("GROQ_API_KEY", groq_cfg.get("api_key", ""))
+            groq_key = from_env(GROQ, groq_cfg.get("api_key", ""))
             groq_model = groq_cfg.get("model", "llama-3.3-70b-versatile")
             provider = GroqProvider(api_key=groq_key or None, model=groq_model)
             if provider.is_available():
@@ -61,7 +69,7 @@ class LLMManager:
                 self.logger.info(f"✅ Groq provider ready: {groq_model}")
 
         # Initialize OpenAI
-        openai_key = os.environ.get("OPENAI_API_KEY", config.get("openai", {}).get("api_key", ""))
+        openai_key = from_env(OPENAI, config.get("openai", {}).get("api_key", ""))
         openai_model = config.get("openai", {}).get("model", "gpt-4o-mini")
         provider = OpenAIProvider(api_key=openai_key, model=openai_model)
         if provider.is_available():
@@ -69,7 +77,7 @@ class LLMManager:
             self.logger.info(f"✅ OpenAI provider ready: {openai_model}")
         
         # Initialize Anthropic
-        anthropic_key = os.environ.get("ANTHROPIC_API_KEY", config.get("claude", {}).get("api_key", ""))
+        anthropic_key = from_env(ANTHROPIC, config.get("claude", {}).get("api_key", ""))
         anthropic_model = config.get("claude", {}).get("model", "claude-3-5-sonnet-20241022")
         provider = AnthropicProvider(api_key=anthropic_key, model=anthropic_model)
         if provider.is_available():
@@ -77,7 +85,7 @@ class LLMManager:
             self.logger.info(f"✅ Anthropic provider ready: {anthropic_model}")
         
         # Initialize Gemini
-        gemini_key = os.environ.get("GEMINI_API_KEY", config.get("gemini", {}).get("api_key", ""))
+        gemini_key = from_env(GEMINI, config.get("gemini", {}).get("api_key", ""))
         gemini_model = config.get("gemini", {}).get("model", "gemini-2.0-flash")
         provider = GeminiProvider(api_key=gemini_key, model=gemini_model)
         if provider.is_available():
@@ -108,7 +116,7 @@ class LLMManager:
             self.logger.warning("      - Install: https://ollama.ai")
             self.logger.warning("      - Start: ollama serve")
             self.logger.warning("      - Pull model: ollama pull codellama")
-            self.logger.warning("   2. export GROQ_API_KEY=gsk_... or OPENAI_API_KEY=sk-...")
+            self.logger.warning(f"   2. export {GROQ}=gsk_... or export {OPENAI}=sk-...")
         else:
             chain_str = ' → '.join(self.fallback_chain)
             self.logger.info(f"📋 Fallback chain: {chain_str}")
@@ -136,13 +144,7 @@ class LLMManager:
             LLMResponse with content and metadata
         """
         if not self.providers:
-            raise RuntimeError(
-                "No LLM providers available:\n"
-                "  export GROQ_API_KEY=gsk_...  # or start Ollama\n"
-                "  export OPENAI_API_KEY=sk-...\n"
-                "  export ANTHROPIC_API_KEY=sk-ant-...\n"
-                "  export GEMINI_API_KEY=AI..."
-            )
+            raise RuntimeError(no_providers_runtime_message())
 
         if isinstance(provider, str):
             provider = provider.strip().lower()
@@ -156,13 +158,7 @@ class LLMManager:
         if provider:
             if provider not in self.providers:
                 avail = ", ".join(sorted(self.providers.keys()))
-                hint = {
-                    "openai": "export OPENAI_API_KEY=sk-...",
-                    "anthropic": "export ANTHROPIC_API_KEY=sk-ant-...",
-                    "gemini": "export GEMINI_API_KEY=...",
-                    "groq": "export GROQ_API_KEY=gsk_...",
-                    "ollama": "start Ollama: ollama serve (and ensure the model is pulled)",
-                }.get(provider, "")
+                hint = explicit_provider_setup_hint(provider)
                 extra = f"\n  {hint}" if hint else ""
                 raise RuntimeError(
                     f"LLM provider {provider!r} is not available (missing key, disabled in config, or unreachable).\n"

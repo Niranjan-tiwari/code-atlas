@@ -79,7 +79,7 @@ Try the web UI:
 
 ```bash
 PYTHONPATH=. python3 scripts/start_api.py
-# Browser: http://127.0.0.1:8888/
+# Browser: http://127.0.0.1:8765/
 ```
 
 **Do not** run `query_code.py` and `start_api.py` at the same time against the same `QDRANT_PATH` (embedded DB single-writer lock). Use one or the other, or Qdrant Server for concurrent access.

@@ -3,11 +3,11 @@ Anthropic (Claude) LLM Provider
 Supports Claude Sonnet, Opus, Haiku
 """
 
-import os
 import logging
 from typing import Optional
 
 from .base import BaseLLMProvider, LLMResponse
+from .env_keys import ANTHROPIC, from_env
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -24,7 +24,7 @@ class AnthropicProvider(BaseLLMProvider):
     }
     
     def __init__(self, api_key: Optional[str] = None, model: str = "claude-3-5-sonnet-20241022"):
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        self.api_key = api_key or from_env(ANTHROPIC)
         self.model = model
         self.logger = logging.getLogger("anthropic_provider")
         self._client = None

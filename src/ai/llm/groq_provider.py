@@ -3,11 +3,11 @@ Groq LLM Provider (OpenAI-compatible API).
 Set GROQ_API_KEY — https://console.groq.com/keys
 """
 
-import os
 import logging
 from typing import Optional
 
 from .base import BaseLLMProvider, LLMResponse
+from .env_keys import GROQ, from_env
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
@@ -16,7 +16,7 @@ class GroqProvider(BaseLLMProvider):
     provider_name = "groq"
 
     def __init__(self, api_key: Optional[str] = None, model: str = "llama-3.3-70b-versatile"):
-        self.api_key = (api_key or os.environ.get("GROQ_API_KEY", "")).strip()
+        self.api_key = (api_key or from_env(GROQ)).strip()
         self.model = model
         self.logger = logging.getLogger("groq_provider")
         self._client = None

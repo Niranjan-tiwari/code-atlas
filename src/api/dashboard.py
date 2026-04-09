@@ -1,7 +1,7 @@
 """
 Web dashboard: search + RAG "Ask" console with thread tabs and local history.
 
-Served at http://localhost:8888/ by search_api.
+Served at http://localhost:8765/ by search_api (default port; override with start_api --port).
 
 Persistence: threads and messages are stored in the browser (localStorage only).
 For team-wide history later, add API + DB (see docs/QUERY_CONSOLE_AND_SCALE.md).

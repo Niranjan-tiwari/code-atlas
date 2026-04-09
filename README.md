@@ -73,7 +73,7 @@ PYTHONPATH=. python3 -m pytest tests/ -q \
 
 ```bash
 PYTHONPATH=. python3 scripts/start_api.py
-# Browser: http://127.0.0.1:8888/  (or http://localhost:8888)
+# Browser: http://127.0.0.1:8765/  (or http://localhost:8765)
 ```
 
 Put API keys in **`.env`** (copy from [`.env.example`](.env.example)); `scripts/query_code.py` loads `.env` automatically via `python-dotenv`. The API reads keys from the environment (export or your process manager).
@@ -109,14 +109,14 @@ Always use the repo root on `PYTHONPATH` so `src.*` imports resolve:
 ```bash
 cd /path/to/code-atlas
 PYTHONPATH=. python3 scripts/start_api.py
-# Optional: --host 127.0.0.1 --port 8890
+# Optional: --host 127.0.0.1 --port 9000
 ```
 
-Open **`http://127.0.0.1:8888/`** — the UI is served from [`src/api/dashboard.py`](src/api/dashboard.py) (no separate frontend build).
+Open **`http://127.0.0.1:8765/`** — the UI is served from [`src/api/dashboard.py`](src/api/dashboard.py) (no separate frontend build).
 
 **Do not** run **`scripts/query_code.py`** at the same time as **`start_api.py`** against the same **`data/qdrant_db`** (embedded Qdrant allows only one process). Stop the CLI first, or use a different `QDRANT_PATH` / Qdrant server for concurrent use.
 
-**Port already in use:** `fuser -k 8888/tcp` then retry, or `PYTHONPATH=. python3 scripts/start_api.py --port 8890`.
+**Port already in use:** `fuser -k 8765/tcp` then retry, or `PYTHONPATH=. python3 scripts/start_api.py --port 9000`.
 
 ---
 
@@ -145,20 +145,20 @@ PYTHONPATH=. python3 scripts/search_clickable.py "redis" --repo my-service -n 10
 
 ```bash
 # Search
-curl "http://localhost:8888/api/search?q=reporting&n=5"
+curl "http://localhost:8765/api/search?q=reporting&n=5"
 
 # List repos
-curl "http://localhost:8888/api/repos"
+curl "http://localhost:8765/api/repos"
 
 # RAG + LLM query (needs LLM configured)
-curl -X POST http://localhost:8888/api/query \
+curl -X POST http://localhost:8765/api/query \
   -H "Content-Type: application/json" \
   -d '{"query": "how does error handling work in the payment service?"}'
 ```
 
 ### 3. Web Dashboard
 
-Open **`http://127.0.0.1:8888/`** after starting the API. The dashboard includes:
+Open **`http://127.0.0.1:8765/`** after starting the API. The dashboard includes:
 
 | Area | What it does |
 |------|----------------|
@@ -171,7 +171,7 @@ Open **`http://127.0.0.1:8888/`** after starting the API. The dashboard includes
 
 `POST /api/query` responses may include **`cache_hit`** when [LLM answer caching](docs/QUERY_CONSOLE_AND_SCALE.md) is enabled in `config/ai_config.json` (`llm_query_cache`: in-process LRU, optional Redis exact match, optional PostgreSQL + pgvector semantic cache).
 
-**Health check:** `curl -s http://127.0.0.1:8888/health`
+**Health check:** `curl -s http://127.0.0.1:8765/health`
 
 ### 4. Parallel Multi-Repo Git Tasks
 
@@ -206,12 +206,12 @@ Review code diffs using RAG context + LLM:
 
 ```bash
 # Via API
-curl -X POST http://localhost:8888/api/review \
+curl -X POST http://localhost:8765/api/review \
   -H "Content-Type: application/json" \
   -d '{"diff": "+func Pay() { fmt.Println(\"pay\") }", "repo": "service-alpha"}'
 
 # Via GitLab webhook (auto-review on MR creation)
-# Set webhook URL: http://your-server:8888/api/webhook/gitlab
+# Set webhook URL: http://your-server:8765/api/webhook/gitlab
 ```
 
 Detects: hardcoded secrets, missing error handling, `fmt.Println` usage, TODOs, and checks against existing codebase patterns.
@@ -221,7 +221,7 @@ Detects: hardcoded secrets, missing error handling, `fmt.Println` usage, TODOs, 
 Find similar code across repos using embedding similarity:
 
 ```bash
-curl "http://localhost:8888/api/duplicates?threshold=0.15&n=20"
+curl "http://localhost:8765/api/duplicates?threshold=0.15&n=20"
 ```
 
 ### 7. Cross-Repo Dependency Scanner
@@ -229,7 +229,7 @@ curl "http://localhost:8888/api/duplicates?threshold=0.15&n=20"
 Scan Go modules, Python packages, Node deps across all repos:
 
 ```bash
-curl "http://localhost:8888/api/deps"
+curl "http://localhost:8765/api/deps"
 ```
 
 Shows: most common dependencies, per-repo breakdown, version info.
@@ -239,7 +239,7 @@ Shows: most common dependencies, per-repo breakdown, version info.
 Auto-generate docs from indexed code:
 
 ```bash
-curl -X POST http://localhost:8888/api/generate-docs \
+curl -X POST http://localhost:8765/api/generate-docs \
   -H "Content-Type: application/json" \
   -d '{"repo": "service-alpha"}'
 ```
@@ -251,7 +251,7 @@ Returns: entry points, API endpoints, data models, package list, AI summary (if 
 Find untested functions and generate test stubs:
 
 ```bash
-curl -X POST http://localhost:8888/api/generate-tests \
+curl -X POST http://localhost:8765/api/generate-tests \
   -H "Content-Type: application/json" \
   -d '{"repo": "service-alpha"}'
 ```
@@ -263,7 +263,7 @@ Returns: tested vs untested functions, coverage %, generated Go test stubs.
 Paste an error/stack trace, get the relevant code path and fix suggestions:
 
 ```bash
-curl -X POST http://localhost:8888/api/debug-error \
+curl -X POST http://localhost:8765/api/debug-error \
   -H "Content-Type: application/json" \
   -d '{"error": "panic: nil pointer dereference\n  main.ProcessPayment /app/handlers/payment.go:45"}'
 ```
@@ -273,7 +273,7 @@ curl -X POST http://localhost:8888/api/debug-error \
 Find-and-replace patterns across multiple repos:
 
 ```bash
-curl -X POST http://localhost:8888/api/migrate \
+curl -X POST http://localhost:8765/api/migrate \
   -H "Content-Type: application/json" \
   -d '{
     "find": "fmt\\.Println",
@@ -288,7 +288,7 @@ curl -X POST http://localhost:8888/api/migrate \
 Rename functions/variables across all repos:
 
 ```bash
-curl -X POST http://localhost:8888/api/refactor \
+curl -X POST http://localhost:8765/api/refactor \
   -H "Content-Type: application/json" \
   -d '{
     "type": "rename_function",
@@ -303,7 +303,7 @@ curl -X POST http://localhost:8888/api/refactor \
 Set up GitLab webhook to auto-reindex repos when code is pushed:
 
 ```bash
-# GitLab webhook URL: http://your-server:8888/api/webhook/gitlab
+# GitLab webhook URL: http://your-server:8765/api/webhook/gitlab
 # Triggers: Push Hook -> re-indexes the repo
 #           Merge Request Hook -> auto-reviews the MR
 ```
@@ -319,7 +319,7 @@ Ask code questions from Slack:
 @codebot help
 ```
 
-Set `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` env vars. Webhook URL: `http://your-server:8888/api/webhook/slack`
+Set `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` env vars. Webhook URL: `http://your-server:8765/api/webhook/slack`
 
 ### 15. 24/7 Agent Mode
 

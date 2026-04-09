@@ -53,7 +53,7 @@ See root **`.gitignore`** (comments at top) and **`docs/GITHUB_PUBLISH.md`**. Ru
 
 ### 2.2 Network exposure
 
-- Default API bind is **`0.0.0.0:8888`** — reachable from other machines on the network. For servers, prefer **`--host 127.0.0.1`** and a reverse proxy (nginx, Caddy) with **TLS** and **authentication**.
+- Default API bind is **`0.0.0.0:8765`** — reachable from other machines on the network. For servers, prefer **`--host 127.0.0.1`** and a reverse proxy (nginx, Caddy) with **TLS** and **authentication**.
 - The API sets **`Access-Control-Allow-Origin: *`** on JSON responses — fine for local dev; in production, put **one origin** behind your proxy or extend the app to restrict CORS.
 - **Webhooks** (`/api/webhook/gitlab`, `/api/webhook/slack`) accept POST bodies **without built-in shared-secret verification** in all paths — restrict by **firewall**, **private network**, **reverse proxy token**, or GitLab “secret token” validation if you add it in code.
 
@@ -232,10 +232,10 @@ cd /path/to/code-atlas
 source .venv/bin/activate
 export PYTHONPATH=.
 export QDRANT_PATH=./data/qdrant_db   # if non-default
-python3 scripts/start_api.py --host 0.0.0.0 --port 8888
+python3 scripts/start_api.py --host 0.0.0.0 --port 8765
 ```
 
-- Dashboard: **`http://SERVER:8888/`**
+- Dashboard: **`http://SERVER:8765/`**
 - Health: **`GET /health`**
 - Search: **`GET /api/search?q=...`**
 - RAG + LLM: **`POST /api/query`** with JSON body `{"query":"..."}` (requires LLM configuration)
@@ -248,7 +248,7 @@ For **production**, prefer **`--host 127.0.0.1`** and TLS in front. Template uni
 
 1. **Systemd** — `User=` dedicated account, `EnvironmentFile=/etc/code-atlas.env` with `chmod 600`, `WorkingDirectory` set.
 2. **Reverse proxy** — HTTPS only; optional Basic auth or OAuth2 at proxy; rate limits.
-3. **Firewall** — only proxy → app port; no public `8888` if avoidable.
+3. **Firewall** — only proxy → app port; no public `8765` if avoidable.
 4. **Separate keys** — prod vs staging; rotate on employee exit.
 5. **Backups** — snapshot **`QDRANT_PATH`** after large reindexes; document how to rebuild from clones if needed.
 6. **Updates** — `git pull`, reinstall requirements if changed, reindex if chunking/embedding schema changes.

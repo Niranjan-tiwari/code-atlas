@@ -9,9 +9,10 @@ Supports:
 """
 
 import logging
-import os
 from typing import List, Optional, Union
 import numpy as np
+
+from ..llm.env_keys import OPENAI, from_env
 
 logger = logging.getLogger("advanced_embeddings")
 
@@ -102,9 +103,9 @@ class AdvancedEmbeddingModel:
         try:
             import openai
             
-            api_key = os.environ.get("OPENAI_API_KEY")
+            api_key = from_env(OPENAI)
             if not api_key:
-                logger.warning("OPENAI_API_KEY not set, cannot use OpenAI embeddings")
+                logger.warning("%s not set, cannot use OpenAI embeddings", OPENAI)
                 self.model = None
                 return
             

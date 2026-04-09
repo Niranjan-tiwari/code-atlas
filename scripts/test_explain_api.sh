@@ -8,7 +8,7 @@ echo "2. This script will test /health and /api/explain"
 echo ""
 
 echo "Testing /health..."
-HEALTH=$(curl -s http://localhost:8888/health 2>/dev/null || echo '{"error":"Connection refused"}')
+HEALTH=$(curl -s http://localhost:8765/health 2>/dev/null || echo '{"error":"Connection refused"}')
 echo "$HEALTH" | python3 -m json.tool 2>/dev/null || echo "$HEALTH"
 
 if echo "$HEALTH" | grep -q "Connection refused\|error"; then
@@ -20,10 +20,10 @@ fi
 
 echo ""
 echo "Testing /api/explain (this may take 60-90s if LLM is slow)..."
-echo "Use: curl --max-time 120 -X POST http://localhost:8888/api/explain -H 'Content-Type: application/json' -d '{\"query\":\"how payment_service works\",\"repo\":\"payment-service\"}'"
+echo "Use: curl --max-time 120 -X POST http://localhost:8765/api/explain -H 'Content-Type: application/json' -d '{\"query\":\"how payment_service works\",\"repo\":\"payment-service\"}'"
 echo ""
 
-RESULT=$(curl -s --max-time 120 -X POST http://localhost:8888/api/explain \
+RESULT=$(curl -s --max-time 120 -X POST http://localhost:8765/api/explain \
   -H "Content-Type: application/json" \
   -d '{"query": "what does main do", "repo": "payment-service"}' 2>/dev/null || echo '{"error":"Request failed or timed out"}')
 

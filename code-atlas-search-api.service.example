@@ -15,7 +15,7 @@ Environment=PYTHONPATH=/path/to/code-atlas
 Environment=QDRANT_PATH=/path/to/code-atlas/data/qdrant_db
 
 # Bind to localhost; put nginx/caddy in front for TLS and access control.
-ExecStart=/path/to/code-atlas/.venv/bin/python3 scripts/start_api.py --host 127.0.0.1 --port 8888
+ExecStart=/path/to/code-atlas/.venv/bin/python3 scripts/start_api.py --host 127.0.0.1 --port 8765
 
 Restart=on-failure
 RestartSec=5

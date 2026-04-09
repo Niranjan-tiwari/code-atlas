@@ -3,11 +3,11 @@ Google Gemini LLM Provider
 Supports Gemini Pro, Gemini Flash
 """
 
-import os
 import logging
 from typing import Optional
 
 from .base import BaseLLMProvider, LLMResponse
+from .env_keys import GEMINI, from_env
 
 
 class GeminiProvider(BaseLLMProvider):
@@ -24,7 +24,7 @@ class GeminiProvider(BaseLLMProvider):
     }
     
     def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.0-flash"):
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
+        self.api_key = api_key or from_env(GEMINI)
         self.model = model
         self.logger = logging.getLogger("gemini_provider")
         self._client = None

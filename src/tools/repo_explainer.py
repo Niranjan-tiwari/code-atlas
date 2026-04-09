@@ -7,6 +7,8 @@ import logging
 import os
 from typing import Dict, Optional, List
 
+from src.ai.llm.env_keys import cli_set_keys_tip
+
 logger = logging.getLogger("repo_explainer")
 
 
@@ -133,7 +135,10 @@ Keep the diagram readable (max 15-20 nodes)."""
         llm = LLMManager()
         
         if not llm.get_available_providers():
-            result["error"] = "No LLM provider available. Set OPENAI_API_KEY, or run `ollama serve` and `ollama pull codellama`"
+            result["error"] = (
+                "No LLM provider available. " + cli_set_keys_tip()
+                + ". Or run `ollama serve` and `ollama pull codellama`"
+            )
             return result
         
         response = llm.generate(

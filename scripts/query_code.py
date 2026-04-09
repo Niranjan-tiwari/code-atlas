@@ -31,6 +31,8 @@ readline.parse_and_bind('set editing-mode emacs')
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
+from src.ai.llm.env_keys import cli_export_block, cli_set_keys_tip
+
 
 def _load_dotenv() -> None:
     """Populate os.environ from repo-root .env if present (does not override existing env)."""
@@ -241,7 +243,7 @@ def interactive_mode(engine: Any, initial_repo: str = None):
         print()
     else:
         print(f"{Colors.RED}⚠️  No LLM providers configured!{Colors.RESET}")
-        print(f"Set API keys: export OPENAI_API_KEY=sk-... (or ANTHROPIC_API_KEY or GEMINI_API_KEY)")
+        print(cli_set_keys_tip())
         print()
     
     # Show repo count
@@ -433,9 +435,7 @@ def interactive_mode(engine: Any, initial_repo: str = None):
             except RuntimeError as e:
                 print(f"\n{Colors.RED}❌ Error: {e}{Colors.RESET}")
                 print(f"{Colors.YELLOW}Make sure at least one LLM API key is set:{Colors.RESET}")
-                print(f"  export OPENAI_API_KEY=sk-...")
-                print(f"  export ANTHROPIC_API_KEY=sk-ant-...")
-                print(f"  export GEMINI_API_KEY=AI...")
+                print(cli_export_block())
             except Exception as e:
                 print(f"\n{Colors.RED}❌ Error: {e}{Colors.RESET}")
             
