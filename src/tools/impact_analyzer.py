@@ -6,7 +6,7 @@ across all indexed repositories to answer:
   "If I change X, what breaks?"
 
 Uses a combination of:
-  1. ChromaDB document-contains search (keyword match in code chunks)
+  1. Keyword / document-contains style search (via vector store adapter)
   2. Semantic embedding search (catches renames, wrappers, indirect usage)
   3. Code parsing to extract function signatures, imports, and call sites
 """
@@ -260,10 +260,10 @@ def _keyword_search(
     retriever, symbol: str, repo_filter: Optional[str], max_results: int
 ) -> List[Dict]:
     """
-    Search ChromaDB for chunks whose document text contains *symbol*.
+    Search indexed chunks whose document text contains *symbol*.
 
-    Uses ChromaDB's where_document $contains filter for fast keyword matching,
-    then falls back to a broader query-embedding search if that yields nothing.
+    Uses the retriever collection's where_document $contains when supported,
+    else semantic search only.
     """
     hits: List[Dict] = []
 

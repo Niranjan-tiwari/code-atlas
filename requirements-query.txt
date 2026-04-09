@@ -1,0 +1,8 @@
+# Minimal deps for scripts/query_code.py (RAG + LLM routing)
+# Qdrant embedded + sentence-transformers. Storage: ./data/qdrant_db (or QDRANT_PATH).
+#
+#   pip install -r requirements-query.txt
+#
+qdrant-client>=1.7.0
+sentence-transformers>=2.2.0
+openai>=1.0.0

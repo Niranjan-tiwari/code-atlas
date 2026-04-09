@@ -20,12 +20,12 @@ fi
 
 echo ""
 echo "Testing /api/explain (this may take 60-90s if LLM is slow)..."
-echo "Use: curl --max-time 120 -X POST http://localhost:8888/api/explain -H 'Content-Type: application/json' -d '{\"query\":\"how whatsapp-segregator works\",\"repo\":\"whatsapp-segregator\"}'"
+echo "Use: curl --max-time 120 -X POST http://localhost:8888/api/explain -H 'Content-Type: application/json' -d '{\"query\":\"how payment_service works\",\"repo\":\"payment-service\"}'"
 echo ""
 
 RESULT=$(curl -s --max-time 120 -X POST http://localhost:8888/api/explain \
   -H "Content-Type: application/json" \
-  -d '{"query": "what does main do", "repo": "whatsapp-segregator"}' 2>/dev/null || echo '{"error":"Request failed or timed out"}')
+  -d '{"query": "what does main do", "repo": "payment-service"}' 2>/dev/null || echo '{"error":"Request failed or timed out"}')
 
 echo "$RESULT" | python3 -m json.tool 2>/dev/null || echo "$RESULT"
 

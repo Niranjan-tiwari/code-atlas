@@ -208,7 +208,7 @@ def _lazy_register_all(retriever):
         from src.tools.auto_reindexer import reindex_repo
         return reindex_repo(
             params.get("repo_path", ""),
-            vector_db_path=params.get("vector_db_path", "./data/vector_db"),
+            vector_db_path=params.get("vector_db_path", "./data/qdrant_db"),
         )
     register_tool("reindex", _reindex)
 

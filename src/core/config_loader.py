@@ -83,9 +83,8 @@ class ConfigLoader:
         """
         Get base_path -> default_branch mapping.
         
-        Rule: netcore_cpass_whatsapp repos -> 'master',
-              netcore_cpass_rcs repos -> 'main'.
-        
+        Values come from config base_paths_config (path + default_branch).
+
         Returns:
             Dict mapping base_path -> default_branch
         """

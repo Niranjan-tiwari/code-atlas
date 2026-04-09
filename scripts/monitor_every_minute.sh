@@ -39,13 +39,14 @@ while true; do
     echo ""
     echo "📦 Vector DB Status:"
     echo "--------------------------------------------------------------------------------"
-    python3 -c "
-import chromadb
+    PYTHONPATH=. python3 -c "
+from qdrant_client import QdrantClient
+from src.ai.vector_backend import vector_db_path
 try:
-    client = chromadb.PersistentClient(path='./data/vector_db')
-    cols = [c for c in client.list_collections() if c.name.startswith('repo_')]
-    indexed = len([c for c in cols if c.count() > 0])
-    total_docs = sum(c.count() for c in cols)
+    client = QdrantClient(path=vector_db_path())
+    cols = [c for c in client.get_collections().collections if c.name.startswith('repo_')]
+    indexed = len([c for c in cols if client.count(c.name, exact=True).count > 0])
+    total_docs = sum(client.count(c.name, exact=True).count for c in cols)
     print(f'  Indexed: {indexed}/80 repos ({indexed/80*100:.1f}%)')
     print(f'  Total chunks: {total_docs:,}')
 except Exception as e:

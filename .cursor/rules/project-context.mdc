@@ -1,0 +1,47 @@
+---
+description: Code Atlas layout, config, commands, token-saving boundaries
+alwaysApply: true
+---
+
+# Code Atlas — project context
+
+**Purpose:** Self-hosted **multi-repo code search** (Qdrant + optional RAG/LLM), **Git/GitLab batch tasks**, **workflows**, **search API** + dashboard.
+
+## Flow (mental model)
+
+```
+indexing scripts → chunks + embeddings → Qdrant (data/qdrant_db)
+query_code.py / search_api → retriever → optional LLM (config/ai_config.json + env)
+run_task / workflows → parallel repo operations (config/config.json, repos)
+```
+
+## Directories
+
+- **`src/ai/`** — Vector store helpers (`vector_backend`, `vector_db`), `rag.py` / `rag_enhanced.py`, `query_engine.py`, `retrieval_router`, embeddings, `llm/manager.py` and providers.
+- **`src/api/search_api.py`** — Flask/FastAPI-style search HTTP API (verify in file if touching routes).
+- **`src/core/`** — `models.py`, `config_loader.py`.
+- **`src/workflows/`** — `engine.py` and workflow execution.
+- **`scripts/`** — Entrypoints: `query_code.py`, `start_api.py`, `index_*`, `run_task.py`, `run_workflow.py`, setup/diag shell scripts.
+- **`config/`** — JSON; team copies from `*.example`. **`indexing_paths.json`**: `base_paths` for clones. **`ai_config.json`**: LLM providers, RAG flags.
+- **`tests/`** — `pytest`; marks/skips for integration, Ollama, missing index.
+
+## Env & secrets
+
+- **`.env`** at repo root: API keys, optional `QDRANT_PATH`. **`query_code.py`** calls `load_dotenv(..., override=False)`.
+- Never commit **`.env`**, populated secrets in `config/`, or **`data/`**.
+
+## Commands (from repo root)
+
+- `PYTHONPATH=. python3 -m pytest tests/ -q`
+- `PYTHONPATH=. python3 scripts/start_api.py`
+- `python3 scripts/query_code.py` (after `pip install -r requirements.txt` + **`requirements-ai.txt`** for full stack)
+
+## Gotchas
+
+- **Single Qdrant embedded writer:** `data/qdrant_db/.lock` — kill duplicate processes if “already locked.”
+- **`PYTHONPATH=.`** required for `src.*` imports when running scripts/modules.
+
+## Token discipline
+
+- Use **this rule + `AGENTS.md`** instead of re-listing every file.
+- Avoid reading **`docs/COMPLETE_TECHNICAL_GUIDE.md`** unless the user asks for deep reference.

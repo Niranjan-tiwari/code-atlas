@@ -6,17 +6,21 @@ Usage:
     python3 scripts/query_code.py                    # Interactive mode
     python3 scripts/query_code.py --query "..."       # Single query
     python3 scripts/query_code.py --search "..."      # Search only (no LLM)
-    python3 scripts/query_code.py --repo whatsapp     # Filter to specific repo
+    python3 scripts/query_code.py --repo my-service   # Filter to specific repo
     python3 scripts/query_code.py --list-repos        # List indexed repos
     python3 scripts/query_code.py --stats             # Show stats
+    python3 scripts/query_code.py --enhanced-rag     # Enhanced RAG (HyDE + hybrid; slower)
 """
 
 import sys
 import os
+import json
 import argparse
 import logging
 import readline
+import signal
 from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 
 # Enable arrow keys, history, and line editing in interactive input()
 readline.parse_and_bind('"\e[A": history-search-backward')
@@ -24,9 +28,103 @@ readline.parse_and_bind('"\e[B": history-search-forward')
 readline.parse_and_bind('set editing-mode emacs')
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT))
 
-from src.ai.query_engine import QueryEngine
+
+def _load_dotenv() -> None:
+    """Populate os.environ from repo-root .env if present (does not override existing env)."""
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(ROOT / ".env", override=False)
+    except ImportError:
+        pass
+
+
+def _effective_qdrant_path(args) -> str:
+    return os.environ.get("QDRANT_PATH") or args.db_path
+
+
+def _query_engine_rag_options(
+    llm_config_path: Optional[str], cli_enhanced: bool
+) -> Tuple[bool, Optional[Dict]]:
+    """
+    Whether to use EnhancedRAGRetriever (HyDE, hybrid BM25+vector, optional rerank/graph/deep).
+    Precedence: CLI --enhanced-rag > env CODE_ATLAS_ENHANCED_RAG > ai_config query_engine.use_enhanced_rag
+    """
+    use = False
+    extra: Optional[Dict] = None
+    if llm_config_path and Path(llm_config_path).is_file():
+        try:
+            with open(llm_config_path, encoding="utf-8") as f:
+                data = json.load(f)
+            qe = data.get("query_engine") or {}
+            use = bool(qe.get("use_enhanced_rag", False))
+            raw = qe.get("enhanced_rag")
+            if isinstance(raw, dict) and raw:
+                extra = dict(raw)
+        except (OSError, json.JSONDecodeError):
+            pass
+    env = os.environ.get("CODE_ATLAS_ENHANCED_RAG", "").strip().lower()
+    if env in ("1", "true", "yes", "on"):
+        use = True
+    if cli_enhanced:
+        use = True
+    return use, extra
+
+
+def _print_missing_deps(e: Exception) -> None:
+    name = getattr(e, "name", None) or "dependency"
+    if "qdrant" in str(e).lower():
+        name = "qdrant_client"
+    print(
+        f"\n❌ Missing Python package ({name})\n\n"
+        f"Install from repo root ({ROOT}):\n"
+        "    pip install -r requirements-query.txt\n"
+        "  or full stack:\n"
+        "    pip install -r requirements.txt -r requirements-ai.txt\n\n"
+        "  Prefer the project venv (deps are not installed for root by default):\n"
+        "    exit   # leave sudo su / root shell\n"
+        "    cd " + str(ROOT) + "\n"
+        "    source .venv/bin/activate   # if you use a venv\n"
+        "    PYTHONPATH=. python3 scripts/query_code.py --list-repos\n",
+        file=sys.stderr,
+    )
+
+
+def _run_list_repos_light(db_path: str) -> None:
+    from src.ai.vector_backend import QdrantEmbeddedLockError, list_indexed_repos_with_chunks
+
+    try:
+        format_repos_list(list_indexed_repos_with_chunks(db_path))
+    except QdrantEmbeddedLockError as e:
+        print(f"\n{e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _run_stats_light(db_path: str, llm_config_path: Optional[str]) -> None:
+    from src.ai.vector_backend import QdrantEmbeddedLockError, list_indexed_repos_with_chunks
+
+    try:
+        repos = list_indexed_repos_with_chunks(db_path)
+    except QdrantEmbeddedLockError as e:
+        print(f"\n{e}", file=sys.stderr)
+        sys.exit(1)
+    total = sum(r["chunks"] for r in repos)
+    providers: list[str] = []
+    try:
+        from src.ai.llm.manager import LLMManager
+
+        lm = LLMManager(config_path=llm_config_path)
+        providers = lm.get_usage_stats().get("available_providers", [])
+    except Exception:
+        pass
+    print(f"📊 Repos: {len(repos)}, Chunks: {total:,}")
+    if providers:
+        print(f"🤖 Providers: {', '.join(providers)}")
+    else:
+        print("🤖 Providers: (none — set API keys or configure config/ai_config.json)")
 
 
 # Colors for terminal output
@@ -72,15 +170,18 @@ def print_help():
   {Colors.GREEN}/repos{Colors.RESET}               - List all indexed repos
   {Colors.GREEN}/info <repo>{Colors.RESET}          - Get repo details
   {Colors.GREEN}/stats{Colors.RESET}               - Show usage stats
-  {Colors.GREEN}/provider <name>{Colors.RESET}      - Switch LLM provider (openai/anthropic/gemini)
+  {Colors.GREEN}/provider <name>{Colors.RESET}      - Switch LLM (groq/ollama/openai/anthropic/gemini/auto)
   {Colors.GREEN}/history{Colors.RESET}              - Show query history
   {Colors.GREEN}/help{Colors.RESET}                 - Show this help
   {Colors.GREEN}/quit{Colors.RESET}                 - Exit
 
+{Colors.DIM}This session uses standard or enhanced RAG depending on how you started the script
+  (--enhanced-rag or CODE_ATLAS_ENHANCED_RAG=1 or query_engine.use_enhanced_rag in ai_config.json).{Colors.RESET}
+
 {Colors.BOLD}Examples:{Colors.RESET}
-  {Colors.DIM}How does the WhatsApp message routing work?
-  /repo whatsapp-segregator
-  /explain how whatsapp_segregator works
+  {Colors.DIM}How does message routing work in this codebase?
+  /repo payment-service
+  /explain how payment_service works
   /explain what does ProcessMessage do
   /search error handling in Go
   /repo all
@@ -126,7 +227,7 @@ def format_repos_list(repos):
     print(f"\n  {Colors.BOLD}Total: {len(repos)} repos, {total_chunks:,} chunks{Colors.RESET}")
 
 
-def interactive_mode(engine: QueryEngine, initial_repo: str = None):
+def interactive_mode(engine: Any, initial_repo: str = None):
     """Run interactive query mode"""
     print_banner()
     
@@ -146,6 +247,18 @@ def interactive_mode(engine: QueryEngine, initial_repo: str = None):
     # Show repo count
     repos = engine.list_repos()
     print(f"{Colors.BOLD}📊 {len(repos)} repositories indexed ({sum(r['chunks'] for r in repos):,} chunks){Colors.RESET}")
+    lm = getattr(engine, "latency_bundle", {}).get("mode", "balanced")
+    print(f"{Colors.DIM}⏱️  Latency mode: {lm} (config latency.* + --latency / CODE_ATLAS_LATENCY_MODE){Colors.RESET}")
+    if getattr(engine, "is_enhanced", False):
+        print(
+            f"{Colors.CYAN}🔬 Enhanced RAG on{Colors.RESET} "
+            f"{Colors.DIM}(HyDE + hybrid when enabled in config; --latency fast forces them off){Colors.RESET}"
+        )
+    else:
+        print(
+            f"{Colors.DIM}Standard vector RAG — for HyDE/hybrid pipeline: "
+            f"--enhanced-rag or CODE_ATLAS_ENHANCED_RAG=1{Colors.RESET}"
+        )
     
     repo_filter = initial_repo
     if repo_filter:
@@ -257,13 +370,16 @@ def interactive_mode(engine: QueryEngine, initial_repo: str = None):
                     print(f"  Total tokens: {stats['llm']['total_tokens']:,}")
                     print(f"  Total cost: ${stats['llm']['total_cost_usd']:.6f}")
                     print(f"  Providers: {', '.join(stats['llm']['available_providers'])}")
+                    print(
+                        f"{Colors.DIM}  (Query counts = natural-language questions only; /search and /explain are not included.){Colors.RESET}"
+                    )
                 
                 elif cmd == "/provider":
                     if arg:
                         provider_override = arg if arg != "auto" else None
                         print(f"{Colors.GREEN}🤖 Provider: {arg}{Colors.RESET}")
                     else:
-                        print(f"{Colors.YELLOW}Usage: /provider <openai|anthropic|gemini|auto>{Colors.RESET}")
+                        print(f"{Colors.YELLOW}Usage: /provider <groq|ollama|openai|anthropic|gemini|auto>{Colors.RESET}")
                 
                 elif cmd == "/history":
                     if engine.history:
@@ -272,6 +388,9 @@ def interactive_mode(engine: QueryEngine, initial_repo: str = None):
                             print(f"  {i}. {h['question'][:80]}... ({h['provider']})")
                     else:
                         print(f"{Colors.DIM}No queries yet.{Colors.RESET}")
+                        print(
+                            f"{Colors.DIM}  Type a question without a leading slash (not /search or /explain) to run RAG + LLM and record history.{Colors.RESET}"
+                        )
                 
                 else:
                     print(f"{Colors.YELLOW}Unknown command: {cmd}. Type /help for commands.{Colors.RESET}")
@@ -337,48 +456,118 @@ def main():
     parser.add_argument("--repo", "-r", help="Filter to specific repository")
     parser.add_argument("--list-repos", action="store_true", help="List indexed repos")
     parser.add_argument("--stats", action="store_true", help="Show stats")
-    parser.add_argument("--provider", "-p", help="LLM provider (openai/anthropic/gemini)")
+    parser.add_argument("--provider", "-p", help="LLM provider (groq/ollama/openai/anthropic/gemini)")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
-    parser.add_argument("--db-path", default="./data/vector_db", help="Vector DB path")
-    
+    parser.add_argument(
+        "--db-path",
+        default="./data/qdrant_db",
+        help="Qdrant storage directory (env QDRANT_PATH overrides default location)",
+    )
+    parser.add_argument(
+        "--enhanced-rag",
+        action="store_true",
+        help=(
+            "Use EnhancedRAGRetriever (HyDE + hybrid BM25/vector; optional rerank/graph in ai_config). "
+            "Slower than plain RAG, not a separate 'agent' — see docs. "
+            "Or set CODE_ATLAS_ENHANCED_RAG=1 or query_engine.use_enhanced_rag in config/ai_config.json"
+        ),
+    )
+    parser.add_argument(
+        "--latency",
+        choices=("fast", "balanced", "quality"),
+        default=None,
+        help=(
+            "Latency budget: fast (minimal augmentations), balanced (default from config), "
+            "quality (allow HyDE/deep from ai_config). Overrides config latency.mode; "
+            "or set CODE_ATLAS_LATENCY_MODE=fast|balanced|quality"
+        ),
+    )
+
     args = parser.parse_args()
-    
+
+    _load_dotenv()
+
     setup_logging(args.verbose)
     
-    # Initialize engine
-    engine = QueryEngine(vector_db_path=args.db_path)
-    
-    # Handle specific commands
+    llm_cfg = ROOT / "config" / "ai_config.json"
+    llm_config_path = str(llm_cfg) if llm_cfg.is_file() else None
+    db_path = _effective_qdrant_path(args)
+
     if args.list_repos:
-        format_repos_list(engine.list_repos())
-        return
-    
-    if args.stats:
-        stats = engine.get_stats()
-        print(f"📊 Repos: {stats['repos_indexed']}, Chunks: {stats['total_chunks']:,}")
-        print(f"🤖 Providers: {', '.join(stats['llm']['available_providers'])}")
-        return
-    
-    if args.search:
-        results = engine.search_only(args.search, n_results=10, repo_filter=args.repo)
-        format_search_results(results)
-        return
-    
-    if args.query:
         try:
-            result = engine.query(
-                question=args.query,
-                repo_filter=args.repo,
-                provider=args.provider,
-                temperature=0.3
-            )
-            print(result.format_answer())
-        except Exception as e:
-            print(f"❌ Error: {e}")
+            _run_list_repos_light(db_path)
+        except ImportError as e:
+            _print_missing_deps(e)
+            sys.exit(1)
         return
-    
-    # Default: interactive mode
-    interactive_mode(engine, initial_repo=args.repo)
+
+    if args.stats:
+        try:
+            _run_stats_light(db_path, llm_config_path)
+        except ImportError as e:
+            _print_missing_deps(e)
+            sys.exit(1)
+        return
+
+    try:
+        from src.ai.query_engine import QueryEngine
+        from src.ai.vector_backend import QdrantEmbeddedLockError
+    except (ModuleNotFoundError, ImportError) as e:
+        _print_missing_deps(e)
+        sys.exit(1)
+
+    use_enhanced, er_extra = _query_engine_rag_options(llm_config_path, args.enhanced_rag)
+    latency_mode = args.latency or os.environ.get("CODE_ATLAS_LATENCY_MODE", "").strip() or None
+    if latency_mode and latency_mode not in ("fast", "balanced", "quality"):
+        latency_mode = None
+    engine = None
+    try:
+        engine = QueryEngine(
+            vector_db_path=db_path,
+            llm_config_path=llm_config_path,
+            use_enhanced_rag=use_enhanced,
+            enhanced_rag_config=er_extra,
+            latency_mode=latency_mode,
+        )
+    except QdrantEmbeddedLockError as e:
+        print(f"\n{e}", file=sys.stderr)
+        sys.exit(1)
+
+    _active_engine = engine
+
+    def _graceful_signal(signum, _frame):
+        if _active_engine is not None:
+            _active_engine.shutdown()
+        sys.exit(128 + signum)
+
+    try:
+        signal.signal(signal.SIGTERM, _graceful_signal)
+    except (ValueError, OSError):
+        pass
+
+    try:
+        if args.search:
+            results = engine.search_only(args.search, n_results=10, repo_filter=args.repo)
+            format_search_results(results)
+            return
+
+        if args.query:
+            try:
+                result = engine.query(
+                    question=args.query,
+                    repo_filter=args.repo,
+                    provider=args.provider,
+                    temperature=0.3,
+                )
+                print(result.format_answer())
+            except Exception as e:
+                print(f"❌ Error: {e}")
+            return
+
+        interactive_mode(engine, initial_repo=args.repo)
+    finally:
+        if engine is not None:
+            engine.shutdown()
 
 
 if __name__ == "__main__":

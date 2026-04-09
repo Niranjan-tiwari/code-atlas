@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Index one repository into vector DB
-Test with webhook-generation repo
+Index a single cloned repository into Qdrant.
 """
 
 import sys
@@ -13,13 +13,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.ai.vector_db import VectorDB
 from src.ai.chunking import ASTChunker, ParentChildIndexer
+from src.ai.vector_backend import repo_collection_name, repo_collection_slug
 import json
 
 
 def load_repo_config():
-    """Load repo config"""
+    """Load repo config (optional; missing file => empty list, use base_path/repo)."""
     config_path = Path(__file__).parent.parent / "config" / "repos_config.json"
-    with open(config_path, 'r') as f:
+    if not config_path.is_file():
+        return []
+    with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
     return config.get("repos", [])
 
@@ -194,10 +197,13 @@ def chunk_go_code(content: str, chunk_size: int = 1000, overlap: int = 200) -> L
     return chunks
 
 
-def index_repo(repo_name: str = "webhook-generation", base_path: str = "/path/to/your/repos"):
+def index_repo(repo_name: str = "my-service", base_path: str = "/path/to/your/repos"):
     """Index one repository"""
     print(f"🚀 Indexing repository: {repo_name}")
     print("=" * 60)
+    slug = repo_collection_slug(repo_name, base_path)
+    collection = repo_collection_name(repo_name, base_path)
+    print(f"📛 Collection: {collection} (metadata repo={slug})")
     
     # Get repo path
     repo_path = get_repo_path(repo_name, base_path)
@@ -226,7 +232,7 @@ def index_repo(repo_name: str = "webhook-generation", base_path: str = "/path/to
     
     # Initialize vector DB
     print("\n🗄️  Initializing vector database...")
-    db = VectorDB(collection_name=f"repo_{repo_name}")
+    db = VectorDB(collection_name=collection)
     
     # Process files with AST chunking
     print("\n📝 Processing files with AST-based chunking...")
@@ -251,7 +257,7 @@ def index_repo(repo_name: str = "webhook-generation", base_path: str = "/path/to
                         content=content,
                         language=language,
                         file_path=file_path,
-                        repo_name=repo_name
+                        repo_name=slug,
                     )
                     
                     # Add both child and parent chunks
@@ -263,7 +269,7 @@ def index_repo(repo_name: str = "webhook-generation", base_path: str = "/path/to
                             "chunk_type": pc_chunk.chunk_type,
                             "is_child": True
                         })
-                        all_ids.append(f"{repo_name}_{file_path}_child_{doc_id}")
+                        all_ids.append(f"{slug}_{file_path}_child_{doc_id}")
                         doc_id += 1
                         
                         # Add parent chunk (for deep context)
@@ -272,9 +278,9 @@ def index_repo(repo_name: str = "webhook-generation", base_path: str = "/path/to
                             **pc_chunk.parent_metadata,
                             "chunk_type": pc_chunk.chunk_type,
                             "is_parent": True,
-                            "child_id": f"{repo_name}_{file_path}_child_{doc_id-1}"
+                            "child_id": f"{slug}_{file_path}_child_{doc_id-1}"
                         })
-                        all_ids.append(f"{repo_name}_{file_path}_parent_{doc_id}")
+                        all_ids.append(f"{slug}_{file_path}_parent_{doc_id}")
                         doc_id += 1
                     
                     continue  # Successfully used AST chunking
@@ -286,14 +292,14 @@ def index_repo(repo_name: str = "webhook-generation", base_path: str = "/path/to
             for chunk_idx, chunk in enumerate(chunks):
                 all_documents.append(chunk)
                 all_metadatas.append({
-                    "repo": repo_name,
+                    "repo": slug,
                     "file": file_path,
                     "language": language,
                     "chunk": chunk_idx,
                     "total_chunks": len(chunks),
                     "chunk_method": "fallback"
                 })
-                all_ids.append(f"{repo_name}_{file_path}_{chunk_idx}")
+                all_ids.append(f"{slug}_{file_path}_{chunk_idx}")
                 doc_id += 1
                 
         except Exception as e:
@@ -331,14 +337,14 @@ def index_repo(repo_name: str = "webhook-generation", base_path: str = "/path/to
             print(f"      File: {result['metadata'].get('file', 'unknown')}")
     
     print("\n✅ Repository indexed successfully!")
-    print(f"📁 Data stored in: ./data/vector_db/")
+    print(f"📁 Data stored in: ./data/qdrant_db/")
 
 
 if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Index repository into vector DB")
-    parser.add_argument("--repo", default="webhook-generation", help="Repository name")
+    parser.add_argument("--repo", default="my-service", help="Repository name (folder name under base path)")
     parser.add_argument("--base-path", default="/path/to/your/repos", help="Base path")
     
     args = parser.parse_args()

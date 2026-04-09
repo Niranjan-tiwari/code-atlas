@@ -4,7 +4,7 @@ Search code and return CLICKABLE file paths in Cursor/VSCode terminal.
 
 Usage:
     python3 scripts/search_clickable.py "ProcessMessage"
-    python3 scripts/search_clickable.py "redis connection" --repo whatsapp-segregator
+    python3 scripts/search_clickable.py "redis connection" --repo payment-service
     python3 scripts/search_clickable.py "handleAuth" -n 10
     python3 scripts/search_clickable.py "webhook generation" --hybrid
 """
@@ -81,7 +81,7 @@ def search(query, n_results=10, repo_filter=None, use_enhanced=False):
     if use_enhanced:
         from src.ai.rag_enhanced import EnhancedRAGRetriever
         rag = EnhancedRAGRetriever(
-            vector_db_path="./data/vector_db",
+            vector_db_path="./data/qdrant_db",
             llm_manager=None,
             use_hyde=False,
             use_deep_context=False,
@@ -91,7 +91,7 @@ def search(query, n_results=10, repo_filter=None, use_enhanced=False):
         )
     else:
         from src.ai.rag import RAGRetriever
-        rag = RAGRetriever(persist_directory="./data/vector_db")
+        rag = RAGRetriever(persist_directory="./data/qdrant_db")
 
     t0 = time.time()
     results = rag.search_code(query, n_results=n_results, repo_filter=repo_filter)

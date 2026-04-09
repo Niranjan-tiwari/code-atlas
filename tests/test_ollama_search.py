@@ -3,8 +3,10 @@ import os
 import logging
 from pathlib import Path
 
+import pytest
+
 # Add project root to path
-project_root = os.path.abspath(os.path.join(os.getcwd(), '.'))
+project_root = os.path.abspath(os.path.join(os.getcwd(), "."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
@@ -14,27 +16,29 @@ logger = logging.getLogger("test_ollama_search")
 
 from src.ai.llm.manager import LLMManager
 from src.ai.rag_enhanced import EnhancedRAGRetriever
+from tests.qdrant_helpers import skip_if_embedded_qdrant_locked
 
+
+@pytest.mark.integration
 def test_search_reporting():
     """Test search for 'reporting' with Ollama summarization"""
+    skip_if_embedded_qdrant_locked("./data/qdrant_db")
     print("\n🔍 INITIALIZING SEARCH TEST")
-    print("="*50)
+    print("=" * 50)
 
     # 1. Initialize LLM Manager (will auto-detect Ollama)
     print("\n1. Initializing AI Engine...")
     llm = LLMManager()
-    
-    # Check if Ollama is available
+
     if "ollama" not in llm.providers:
-        print("❌ Ollama not found! Please run 'ollama serve' and 'ollama pull codellama'")
-        return
-    
+        pytest.skip("Ollama not available (run ollama serve and pull a model)")
+
     print(f"✅ AI Engine Ready. Providers: {list(llm.providers.keys())}")
 
     # 2. Initialize RAG
     print("\n2. Initializing Enhanced RAG...")
     rag = EnhancedRAGRetriever(
-        vector_db_path="./data/vector_db",
+        vector_db_path="./data/qdrant_db",
         llm_manager=llm,
         use_hyde=True,     # Use Ollama for HyDE
         use_reranking=True,
@@ -46,10 +50,9 @@ def test_search_reporting():
     print(f"\n3. Searching for: '{query}'")
     
     results = rag.search_code(query, n_results=5)
-    
+
     if not results:
-        print("❌ No results found. Index might be empty.")
-        return
+        pytest.skip("No vector hits (index empty or query mismatch)")
 
     print(f"\n✅ Found {len(results)} results:")
     for i, res in enumerate(results, 1):

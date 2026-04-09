@@ -5,7 +5,7 @@ Supports:
 - jina-embeddings-v2-base-code (768 dim, 8k context, code-specific)
 - CodeBERT (Microsoft)
 - OpenAI text-embedding-3-small (1536 dim)
-- ChromaDB default (fallback)
+- Local sentence-transformers (MiniLM fallback)
 """
 
 import logging
@@ -30,9 +30,9 @@ class AdvancedEmbeddingModel:
                 - "jina-code": jina-embeddings-v2-base-code (best for code)
                 - "codebert": microsoft/codebert-base
                 - "openai": text-embedding-3-small
-                - "chromadb": ChromaDB default (fallback)
+                - "local": sentence-transformers all-MiniLM-L6-v2 (fallback)
         """
-        self.model_name = model_name
+        self.model_name = "local" if model_name == "chromadb" else model_name
         self.model = None
         self.tokenizer = None
         self.dimensions = 384  # Default
@@ -47,9 +47,20 @@ class AdvancedEmbeddingModel:
         elif self.model_name == "openai":
             self._load_openai()
         else:
-            logger.info("Using ChromaDB default embeddings")
+            self._load_local_minilm()
+
+    def _load_local_minilm(self):
+        try:
+            from sentence_transformers import SentenceTransformer
+
+            logger.info("Loading all-MiniLM-L6-v2 (local fallback)...")
+            self.model = SentenceTransformer("all-MiniLM-L6-v2")
+            self.dimensions = 384
+            logger.info("✅ Local embeddings (384 dim)")
+        except Exception as e:
+            logger.warning("sentence-transformers not available for local fallback: %s", e)
             self.model = None
-    
+
     def _load_jina(self):
         """Load Jina embeddings v2 base code"""
         try:
@@ -192,10 +203,9 @@ def get_embedding_model(model_name: Optional[str] = None) -> AdvancedEmbeddingMo
         return AdvancedEmbeddingModel(model_name)
     
     # Auto-detect: try jina-code first, then fallback
-    for name in ["jina-code", "codebert", "openai", "chromadb"]:
+    for name in ["jina-code", "codebert", "openai", "local"]:
         model = AdvancedEmbeddingModel(name)
         if model.is_available():
             return model
-    
-    # Final fallback
-    return AdvancedEmbeddingModel("chromadb")
+
+    return AdvancedEmbeddingModel("local")

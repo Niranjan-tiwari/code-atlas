@@ -3,6 +3,9 @@
 # Core dependencies
 # Python 3.8+ required
 
+# Load repo-root .env for local secrets (e.g. OPENAI_API_KEY in query_code.py)
+python-dotenv>=1.0.0
+
 # HTTP requests for WhatsApp notifications and API calls
 requests>=2.31.0
 
@@ -27,3 +30,7 @@ pytest-cov>=4.1.0
 # Optional: For Twilio WhatsApp
 # Use: pip install twilio (if using Twilio)
 # twilio>=8.0.0
+
+# RAG / query CLI (Qdrant + sentence-transformers):
+#   pip install -r requirements-query.txt
+# See requirements-query.txt

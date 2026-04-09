@@ -177,9 +177,9 @@ class TestWorkflowEngine:
         steps = [
             WorkflowStep(id="s1", tool="echo", params={"msg": "{user.name}"}),
         ]
-        result = engine.run("test", steps, {"name": "Niranjan"})
+        result = engine.run("test", steps, {"name": "TestUser"})
 
-        assert result.steps[0].output["echo"] == "Niranjan"
+        assert result.steps[0].output["echo"] == "TestUser"
 
     def test_condition_skip(self):
         register_tool("tool", lambda p, r: {"ok": True})

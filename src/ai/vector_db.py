@@ -1,202 +1,166 @@
 """
-Vector Database wrapper using ChromaDB
-Indexes code and enables similarity search
+Vector database for code indexing and search (Qdrant embedded, on-disk).
 """
 
-import os
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
-import chromadb
-from chromadb.config import Settings
+from typing import Dict, List, Optional
+
+from .vector_backend import vector_db_path
+from .qdrant_rag_support import ensure_qdrant_collection, qdrant_upsert_points
 
 
 class VectorDB:
-    """Vector database for code indexing and search"""
-    
-    def __init__(self, persist_directory: str = "./data/vector_db", collection_name: str = "code_snippets"):
-        """
-        Initialize vector database
-        
-        Args:
-            persist_directory: Directory to persist data
-            collection_name: Name of the collection
-        """
-        self.persist_directory = Path(persist_directory)
+    """Qdrant-backed vector store for code chunks."""
+
+    def __init__(
+        self,
+        persist_directory: Optional[str] = None,
+        collection_name: str = "code_snippets",
+    ):
+        self.persist_directory = Path(persist_directory or vector_db_path())
         self.persist_directory.mkdir(parents=True, exist_ok=True)
-        
         self.collection_name = collection_name
         self.logger = logging.getLogger("vector_db")
-        
-        # Get best embedding function (Ollama bge-m3 if available)
+
         self._emb_fn = None
         try:
             from src.ai.embeddings.ollama_embed import get_best_embedding_function
+
             self._emb_fn = get_best_embedding_function()
         except Exception:
             pass
-        
-        emb_name = getattr(self._emb_fn, 'model', 'default') if self._emb_fn else 'default'
-        
-        # Initialize ChromaDB client
-        self.client = chromadb.PersistentClient(
-            path=str(self.persist_directory),
-            settings=Settings(anonymized_telemetry=False)
+
+        if self._emb_fn is None:
+            from src.ai.embeddings.ollama_embed import SentenceTransformerEmbedding
+
+            emb = SentenceTransformerEmbedding("default")
+            emb._load()
+            self._emb_fn = emb
+
+        emb_name = getattr(self._emb_fn, "model", getattr(self._emb_fn, "model_name", "default"))
+        from .vector_backend import open_embedded_qdrant_client
+
+        self.client = open_embedded_qdrant_client(str(self.persist_directory), mkdir=False)
+        dim = self._embedding_dim()
+        ensure_qdrant_collection(self.client, self.collection_name, dim)
+        self.logger.info(
+            f"Qdrant collection ready: {self.collection_name} (embedding: {emb_name}, dim={dim})"
         )
-        
-        # Get or create collection
-        try:
-            self.collection = self.client.get_collection(
-                name=collection_name,
-                embedding_function=self._emb_fn
-            )
-            self.logger.info(f"Loaded existing collection: {collection_name} (embedding: {emb_name})")
-        except Exception:
-            self.collection = self.client.create_collection(
-                name=collection_name,
-                embedding_function=self._emb_fn,
-                metadata={
-                    "hnsw:space": "cosine",
-                    "hnsw:construction_ef": 100,
-                    "hnsw:M": 8
-                }
-            )
-            self.logger.info(f"Created new collection: {collection_name} (embedding: {emb_name})")
-    
+
+    def _embedding_dim(self) -> int:
+        d = getattr(self._emb_fn, "dims", None)
+        if d is not None:
+            return int(d)
+        v = self._emb_fn(["dim_probe"])
+        if v and v[0]:
+            return len(v[0])
+        return 384
+
     def add_documents(
         self,
         documents: List[str],
         metadatas: Optional[List[Dict]] = None,
-        ids: Optional[List[str]] = None
+        ids: Optional[List[str]] = None,
     ):
-        """
-        Add documents to vector database
-        
-        Args:
-            documents: List of text documents (code snippets)
-            metadatas: List of metadata dicts (repo, file_path, etc.)
-            ids: List of unique IDs
-        """
         if not documents:
             return
-        
-        # Generate IDs if not provided
         if ids is None:
             ids = [f"doc_{i}" for i in range(len(documents))]
-        
-        # Default metadata if not provided
         if metadatas is None:
             metadatas = [{}] * len(documents)
-        
-        try:
-            self.collection.add(
-                documents=documents,
-                metadatas=metadatas,
-                ids=ids
-            )
-            self.logger.info(f"Added {len(documents)} documents to collection")
-        except Exception as e:
-            self.logger.error(f"Error adding documents: {e}")
-            raise
-    
+
+        vectors = self._emb_fn(documents)
+        qdrant_upsert_points(
+            self.client,
+            self.collection_name,
+            documents,
+            vectors,
+            metadatas,
+            ids,
+        )
+        self.logger.info(f"Added {len(documents)} documents to {self.collection_name}")
+
     def search(
         self,
         query: str,
         n_results: int = 5,
-        where: Optional[Dict] = None
+        where: Optional[Dict] = None,
     ) -> List[Dict]:
-        """
-        Search for similar documents
-        
-        Args:
-            query: Search query text
-            n_results: Number of results to return
-            where: Metadata filter (e.g., {"repo": "webhook-generation"})
-        
-        Returns:
-            List of result dicts with document, metadata, distance
-        """
-        try:
-            results = self.collection.query(
-                query_texts=[query],
-                n_results=n_results,
-                where=where
+        from .qdrant_rag_support import (
+            client_query_vectors,
+            scored_to_distance,
+            where_dict_to_filter,
+        )
+
+        qe = self._emb_fn([query])
+        flt = where_dict_to_filter(where)
+        hits = client_query_vectors(
+            self.client,
+            self.collection_name,
+            qe[0],
+            n_results,
+            flt,
+            with_payload=True,
+        )
+        out = []
+        for hit in hits:
+            p = dict(hit.payload or {})
+            doc = p.pop("document", "")
+            out.append(
+                {
+                    "document": doc,
+                    "metadata": p,
+                    "distance": scored_to_distance(hit.score),
+                    "id": str(hit.id),
+                }
             )
-            
-            # Format results
-            formatted_results = []
-            if results['documents'] and len(results['documents'][0]) > 0:
-                for i in range(len(results['documents'][0])):
-                    formatted_results.append({
-                        'document': results['documents'][0][i],
-                        'metadata': results['metadatas'][0][i] if results['metadatas'] else {},
-                        'distance': results['distances'][0][i] if results['distances'] else None,
-                        'id': results['ids'][0][i] if results['ids'] else None
-                    })
-            
-            self.logger.info(f"Search returned {len(formatted_results)} results")
-            return formatted_results
-        
-        except Exception as e:
-            self.logger.error(f"Error searching: {e}")
-            return []
-    
+        self.logger.info(f"Search returned {len(out)} results")
+        return out
+
     def get_collection_info(self) -> Dict:
-        """Get information about the collection"""
         try:
-            count = self.collection.count()
+            count = int(self.client.count(self.collection_name, exact=True).count)
             return {
-                'name': self.collection_name,
-                'count': count,
-                'persist_directory': str(self.persist_directory)
+                "name": self.collection_name,
+                "count": count,
+                "persist_directory": str(self.persist_directory),
+                "backend": "qdrant",
             }
         except Exception as e:
             self.logger.error(f"Error getting collection info: {e}")
-            return {'name': self.collection_name, 'count': 0}
-    
+            return {"name": self.collection_name, "count": 0, "backend": "qdrant"}
+
     def delete_collection(self):
-        """Delete the collection (use with caution!)"""
         try:
-            self.client.delete_collection(name=self.collection_name)
+            self.client.delete_collection(collection_name=self.collection_name)
             self.logger.warning(f"Deleted collection: {self.collection_name}")
         except Exception as e:
             self.logger.error(f"Error deleting collection: {e}")
 
 
 def test_vector_db():
-    """Simple test function"""
     print("🧪 Testing Vector DB...")
-    
-    # Create vector DB
-    db = VectorDB()
-    
-    # Add test documents
+    db = VectorDB(collection_name="test_snippets_tmp")
     test_docs = [
         "def add_logging(message):\n    logger.info(message)",
         "def handle_error(error):\n    logger.error(error)",
-        "def process_data(data):\n    return data.process()"
+        "def process_data(data):\n    return data.process()",
     ]
-    
     test_metadata = [
         {"repo": "test", "file": "test1.py"},
         {"repo": "test", "file": "test2.py"},
-        {"repo": "test", "file": "test3.py"}
+        {"repo": "test", "file": "test3.py"},
     ]
-    
     db.add_documents(test_docs, test_metadata)
-    
-    # Search
     results = db.search("logging function", n_results=2)
-    
     print(f"✅ Found {len(results)} results")
     for i, result in enumerate(results, 1):
         print(f"\n{i}. {result['document'][:50]}...")
         print(f"   Metadata: {result['metadata']}")
-    
-    # Collection info
     info = db.get_collection_info()
     print(f"\n📊 Collection: {info['name']}, Documents: {info['count']}")
-    
+    db.delete_collection()
     print("\n✅ Vector DB test passed!")
 
 

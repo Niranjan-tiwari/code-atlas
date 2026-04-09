@@ -1,7 +1,7 @@
 {
   "llm": {
     "default_model": "openai",
-    "fallback_chain": ["ollama", "openai", "anthropic", "gemini"],
+    "fallback_chain": ["openai", "anthropic", "gemini", "groq", "ollama"],
     "strategy": {
       "code_generation": "openai",
       "code_review": "anthropic",
@@ -9,6 +9,10 @@
       "simple": "gemini",
       "cost_optimization": true,
       "quality_threshold": 0.8
+    },
+    "groq": {
+      "enabled": false,
+      "model": "llama-3.3-70b-versatile"
     },
     "openai": {
       "enabled": true,
@@ -23,14 +27,14 @@
       "model": "gemini-2.0-flash"
     },
     "ollama": {
-      "enabled": true,
+      "enabled": false,
       "base_url": "http://localhost:11434",
       "model": "codellama"
     }
   },
   "vector_db": {
-    "provider": "chromadb",
-    "persist_directory": "./data/vector_db",
+    "provider": "qdrant",
+    "persist_directory": "./data/qdrant_db",
     "collection_name": "code_snippets"
   },
   "rag": {
@@ -43,7 +47,41 @@
     "default_temperature": 0.3,
     "max_tokens": 4000,
     "max_context_length": 6000,
-    "include_history": true
+    "include_history": true,
+    "use_enhanced_rag": false,
+    "enhanced_rag": {
+      "use_hyde": false,
+      "use_reranking": false,
+      "use_graphrag": false,
+      "use_deep_context": false,
+      "use_hybrid_search": true
+    }
+  },
+  "latency": {
+    "mode": "balanced",
+    "progressive_retrieval": true,
+    "progressive_initial_k": 3,
+    "expand_relevance_threshold": 0.28,
+    "query_classification": true
+  },
+  "llm_query_cache": {
+    "enabled": true,
+    "ttl_seconds": 86400,
+    "l1_max_size": 256,
+    "redis": {
+      "enabled": false,
+      "host": "localhost",
+      "port": 6379,
+      "db": 1,
+      "prefix": "llmqa:"
+    },
+    "semantic": {
+      "enabled": false,
+      "database_url": "",
+      "table": "code_atlas_llm_q_cache",
+      "similarity_threshold": 0.92,
+      "max_candidates": 8
+    }
   },
   "cache": {
     "enabled": true,

@@ -19,8 +19,7 @@ class RepoDiscoverer:
             base_path: Base directory containing git repos
             default_branch: Force this as the default branch for all repos
                            under this base_path (overrides git detection).
-                           Rule: netcore_cpass_whatsapp -> master,
-                                 netcore_cpass_rcs -> main
+                           Set per workspace in config base_paths_config.
         """
         self.base_path = base_path
         self.forced_default_branch = default_branch
@@ -122,9 +121,7 @@ class RepoDiscoverer:
         """Detect component type from repo name"""
         name_lower = repo_name.lower()
         
-        if "whatsapp" in name_lower:
-            return "whatsapp"
-        elif "webhook" in name_lower:
+        if "webhook" in name_lower:
             return "webhooks"
         elif "api" in name_lower:
             return "api"

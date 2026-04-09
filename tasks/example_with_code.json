@@ -1,13 +1,13 @@
 {
-  "jira_id": "CPASS-5678",
+  "jira_id": "PROJ-5678",
   "description": "Add version file to all repos",
-  "branch_name": "feature/CPASS-5678-version-file",
+  "branch_name": "feature/PROJ-5678-version-file",
   "branch_only": false,
   "delete_branch_first": false,
   "repos": [
-    "whatsapp",
-    "wa-payment-polling",
-    "go-rcs-reporting"
+    "service-alpha",
+    "service-beta",
+    "service-gamma"
   ],
   "base_paths": [
     "/path/to/your/repos",
@@ -15,32 +15,32 @@
   ],
   "tasks": [
     {
-      "repo": "whatsapp",
+      "repo": "service-alpha",
       "description": "Add version file",
       "files_to_modify": ["VERSION"],
       "code_changes": {
         "VERSION": "1.0.0\n"
       },
-      "commit_message": "[CPASS-5678] feat: add version file"
+      "commit_message": "[PROJ-5678] feat: add version file"
     },
     {
-      "repo": "wa-payment-polling",
+      "repo": "service-beta",
       "description": "Add version file",
       "files_to_modify": ["VERSION"],
       "code_changes": {
         "VERSION": "2.1.0\n"
       },
-      "commit_message": "[CPASS-5678] feat: add version file"
+      "commit_message": "[PROJ-5678] feat: add version file"
     },
     {
-      "repo": "go-rcs-reporting",
+      "repo": "service-gamma",
       "description": "Add version file with build info",
       "files_to_modify": ["VERSION", "build_info.go"],
       "code_changes": {
         "VERSION": "1.5.0\n",
         "build_info.go": "package main\n\nconst Version = \"1.5.0\"\n"
       },
-      "commit_message": "[CPASS-5678] feat: add version file and build info"
+      "commit_message": "[PROJ-5678] feat: add version file and build info"
     }
   ]
 }

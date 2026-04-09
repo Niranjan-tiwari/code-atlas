@@ -1,5 +1,5 @@
 """
-Embedding Function for ChromaDB using BAAI/bge-m3.
+Embedding functions for RAG (sentence-transformers + optional Ollama HTTP).
 
 Uses sentence-transformers library directly (not Ollama HTTP) for speed.
 Falls back to Ollama if sentence-transformers fails.
@@ -11,16 +11,18 @@ bge-m3 vs default (all-MiniLM-L6-v2):
   - ~0.27s/text on CPU (one-time indexing cost)
 
 Setup:
-  pip install sentence-transformers  # already installed via chromadb
+  pip install sentence-transformers
   # Model auto-downloads on first use (~1.2 GB)
 """
 
 import logging
 import os
 from typing import List, Optional
-from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
 
 logger = logging.getLogger("embeddings")
+
+Documents = List[str]
+Embeddings = List[List[float]]
 
 # Model choices (pick via EMBED_MODEL env var)
 MODELS = {
@@ -33,8 +35,8 @@ MODELS = {
 DEFAULT_MODEL = os.environ.get("EMBED_MODEL", "bge-small")
 
 
-class SentenceTransformerEmbedding(EmbeddingFunction):
-    """ChromaDB-compatible embedding using sentence-transformers (local, fast)"""
+class SentenceTransformerEmbedding:
+    """Embedding via sentence-transformers (local, fast)."""
     
     def __init__(self, model_key: str = DEFAULT_MODEL):
         self.model_key = model_key
@@ -83,8 +85,8 @@ class SentenceTransformerEmbedding(EmbeddingFunction):
             return [[0.0] * self.dims] * len(input)
 
 
-class OllamaEmbeddingFunction(EmbeddingFunction):
-    """ChromaDB-compatible embedding using Ollama HTTP (slower, but works with any Ollama model)"""
+class OllamaEmbeddingFunction:
+    """Embedding via Ollama HTTP (slower; any Ollama embed model)."""
     
     def __init__(self, model: str = "bge-m3", base_url: str = "http://localhost:11434"):
         import requests
@@ -129,32 +131,52 @@ class OllamaEmbeddingFunction(EmbeddingFunction):
         return embeddings
 
 
-def get_best_embedding_function() -> Optional[EmbeddingFunction]:
+_shared_embedding = None
+_shared_embedding_key: Optional[str] = None
+
+
+def get_best_embedding_function() -> Optional[object]:
     """
     Get the best available embedding function.
-    Priority: sentence-transformers (bge-small default) > Ollama bge-m3 > ChromaDB default
+    Priority: sentence-transformers (bge-small default) > Ollama bge-m3
     Default: bge-small (384 dims) - matches reindex and unified collection.
+
+    Returns a process-wide singleton so bulk in-process indexing loads the model once.
     """
+    global _shared_embedding, _shared_embedding_key
     model_key = os.environ.get("EMBED_MODEL", "bge-small")
-    
+    if _shared_embedding is not None and _shared_embedding_key == model_key:
+        return _shared_embedding
+
     # 1. Try sentence-transformers (fastest)
     try:
         emb = SentenceTransformerEmbedding(model_key)
         emb._load()  # Verify it works
         logger.info(f"Using sentence-transformers: {emb.model_name} ({emb.dims} dims)")
+        _shared_embedding = emb
+        _shared_embedding_key = model_key
         return emb
     except Exception as e:
         logger.warning(f"sentence-transformers not available: {e}")
-    
+
     # 2. Try Ollama (slower but works)
     try:
         ollama = OllamaEmbeddingFunction()
         if ollama.is_available():
             logger.info("Using Ollama bge-m3 embeddings")
+            _shared_embedding = ollama
+            _shared_embedding_key = model_key
             return ollama
     except Exception:
         pass
-    
-    # 3. Fall back to ChromaDB default
-    logger.info("Using ChromaDB default embeddings (all-MiniLM-L6-v2, 384 dims)")
+
+    try:
+        emb = SentenceTransformerEmbedding("default")
+        emb._load()
+        logger.info("Using sentence-transformers default (all-MiniLM-L6-v2, 384 dims)")
+        _shared_embedding = emb
+        _shared_embedding_key = model_key
+        return emb
+    except Exception as e:
+        logger.warning("No embedding backend available: %s", e)
     return None

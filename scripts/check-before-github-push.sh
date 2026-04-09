@@ -8,7 +8,7 @@ echo "== Code Atlas: pre-push secret / hygiene check =="
 BAD=0
 
 for f in config/config.json config/notifications_config.json config/repos_config.json \
-         .env .env.local; do
+         config/indexing_paths.json config/ai_config.json .env .env.local; do
   if git ls-files --error-unmatch "$f" &>/dev/null; then
     echo "ERROR: $f is tracked — remove from git before pushing (use *.example only)."
     BAD=1

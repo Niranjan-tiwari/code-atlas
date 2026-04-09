@@ -61,8 +61,8 @@
     }
   },
   "vector_db": {
-    "provider": "chromadb",
-    "persist_directory": "./data/vector_db",
+    "provider": "qdrant",
+    "persist_directory": "./data/qdrant_db",
     "collection_name": "code_snippets"
   },
   "rag": {
@@ -70,6 +70,25 @@
     "chunk_overlap": 200,
     "top_k": 5,
     "similarity_threshold": 0.7
+  },
+  "llm_query_cache": {
+    "enabled": true,
+    "ttl_seconds": 86400,
+    "l1_max_size": 256,
+    "redis": {
+      "enabled": false,
+      "host": "localhost",
+      "port": 6379,
+      "db": 1,
+      "prefix": "llmqa:"
+    },
+    "semantic": {
+      "enabled": false,
+      "database_url": "${DATABASE_URL}",
+      "table": "code_atlas_llm_q_cache",
+      "similarity_threshold": 0.92,
+      "max_candidates": 8
+    }
   },
   "observability": {
     "langsmith": {

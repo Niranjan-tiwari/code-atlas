@@ -39,7 +39,7 @@ class Task:
     status: str = "pending"  # pending, in_progress, completed, failed
     branch_name: Optional[str] = None  # Custom branch name (if None, auto-generated)
     source_branch: Optional[str] = None  # Per-task source branch override (falls back to repo default)
-    jira_id: Optional[str] = None  # Jira ticket ID (e.g., "CPASS-1234")
+    jira_id: Optional[str] = None  # Jira ticket ID (e.g., "PROJ-1234")
     continue_on_existing: bool = False  # Continue working on existing branch if it exists
     delete_branch_first: bool = False  # Delete branch before creating (if it exists)
     branch_only: bool = False  # If True, only create branch and push (skip code changes/commit)

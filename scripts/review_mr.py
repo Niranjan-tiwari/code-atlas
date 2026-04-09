@@ -319,7 +319,7 @@ def main():
     from src.ai.rag import RAGRetriever
     from src.tools.pr_reviewer import review_diff
 
-    retriever = RAGRetriever(persist_directory="./data/vector_db")
+    retriever = RAGRetriever(persist_directory="./data/qdrant_db")
     review = review_diff(retriever, diff_text, repo_name)
 
     # Print results

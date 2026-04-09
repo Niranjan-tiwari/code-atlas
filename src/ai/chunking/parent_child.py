@@ -191,7 +191,7 @@ class ParentChildIndexer:
         
         Args:
             child_chunk_id: ID of the child chunk
-            vector_db_collection: ChromaDB collection
+            vector_db_collection: legacy vector collection with .get(ids=..., include=...)
             
         Returns:
             Parent code string or None

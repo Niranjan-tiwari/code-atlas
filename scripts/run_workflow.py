@@ -116,7 +116,7 @@ def main():
     parser.add_argument("--base-path", help="Base path for repos")
     parser.add_argument("--dry-run", action="store_true", default=True, help="Dry run mode (default)")
     parser.add_argument("--apply", action="store_true", help="Actually apply changes (disable dry-run)")
-    parser.add_argument("--db", default="./data/vector_db", help="Vector DB path")
+    parser.add_argument("--db", default="./data/qdrant_db", help="Vector DB path")
     parser.add_argument("--json", action="store_true", help="Output raw JSON")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose step output")
     args = parser.parse_args()

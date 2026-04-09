@@ -2,6 +2,8 @@ import sys
 import os
 import logging
 
+import pytest
+
 # Add project root to path
 project_root = os.path.abspath(os.path.join(os.getcwd(), '.'))
 if project_root not in sys.path:
@@ -13,11 +15,15 @@ logger = logging.getLogger("test_fast_search")
 
 from src.ai.llm.manager import LLMManager
 from src.ai.rag_enhanced import EnhancedRAGRetriever
+from tests.qdrant_helpers import skip_if_embedded_qdrant_locked
 
+
+@pytest.mark.integration
 def test_fast_search():
     """Test search for 'reporting' WITHOUT slow LLM features (HyDE/DeepContext)"""
+    skip_if_embedded_qdrant_locked("./data/qdrant_db")
     print("\n🔍 INITIALIZING FAST SEARCH TEST")
-    print("="*50)
+    print("=" * 50)
 
     # 1. Initialize LLM Manager
     llm = LLMManager()
@@ -25,7 +31,7 @@ def test_fast_search():
     # 2. Initialize RAG (Disable heavy LLM usage)
     print("\n2. Initializing Enhanced RAG (Fast Mode)...")
     rag = EnhancedRAGRetriever(
-        vector_db_path="./data/vector_db",
+        vector_db_path="./data/qdrant_db",
         llm_manager=llm,
         use_hyde=False,          # DISABLE HyDE for speed
         use_deep_context=False,  # DISABLE Deep Context for speed

@@ -59,7 +59,7 @@ echo ""
 
 REPO_BASE="/path/to/your/repos"
 REPOS=(
-    "webhook-generation"
+    "my-service"
 )
 
 for repo in "${REPOS[@]}"; do
@@ -91,6 +91,6 @@ echo ""
 echo "✅ GitLab authentication setup complete!"
 echo ""
 echo "📋 Test a repository:"
-echo "   cd /path/to/your/repos/webhook-generation"
+echo "   cd /path/to/your/repos/my-service"
 echo "   git fetch origin"
 echo ""

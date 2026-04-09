@@ -21,8 +21,8 @@ Incremental (skip unchanged files within repos):
 Parallel workers (default: 75% of cores):
   python3 scripts/reindex_with_ollama.py --workers 8
 
-Index both WhatsApp and RCS repos:
-  python3 scripts/reindex_with_ollama.py --paths /path/to/your/repos,/path/to/your/repos-alt
+Scan paths: config/indexing_paths.json, REPOS_BASE_PATH, or:
+  python3 scripts/reindex_with_ollama.py --paths /path/a,/path/b
 
 Override model: EMBED_MODEL=bge-small python3 scripts/reindex_with_ollama.py
 """
@@ -41,10 +41,7 @@ PROJECT_ROOT = str(Path(__file__).parent.parent)
 sys.path.insert(0, PROJECT_ROOT)
 os.chdir(PROJECT_ROOT)
 
-VECTOR_DB_PATH = "./data/vector_db"
 STATE_DIR = "./data/reindex_state"
-# Default: scan both netcore_cpass_whatsapp and netcore_cpass_rcs
-DEFAULT_PATHS = "/path/to/your/repos,/path/to/your/repos-alt"
 
 # Force flush on all prints
 import builtins
@@ -178,13 +175,15 @@ def _index_repo_worker(args: tuple) -> dict:
     }
 
     repo_path = Path(repo_path_str)
-    repo_name = repo_path.name
-    result["repo_name"] = repo_name
+    repo_folder = repo_path.name
+    parent_name = repo_path.parent.name
+    repo_slug = f"{parent_name}_{repo_folder}".replace(".", "_")
+    result["repo_name"] = repo_slug
 
-    if repo_name in skip_repos:
+    if repo_folder in skip_repos:
         result["error"] = "skip_list"
         return result
-    if resume and repo_name in already_indexed:
+    if resume and repo_slug in already_indexed:
         result["error"] = "already_indexed"
         return result
 
@@ -201,7 +200,7 @@ def _index_repo_worker(args: tuple) -> dict:
         from scripts.index_one_repo import load_code_files
 
         state_dir = Path(state_dir_str)
-        state = _load_state(repo_name, state_dir) if incremental else {}
+        state = _load_state(repo_slug, state_dir) if incremental else {}
 
         files = load_code_files(repo_path)
         if not files:
@@ -222,7 +221,7 @@ def _index_repo_worker(args: tuple) -> dict:
 
             result["files_modified"].append(file_path)
             docs, metas, ids = _chunk_with_ast_or_fallback(
-                content, language, file_path, repo_name
+                content, language, file_path, repo_slug
             )
             base = len(all_docs)
             all_docs.extend(docs)
@@ -291,8 +290,17 @@ def _index_repo_worker(args: tuple) -> dict:
 
 def main():
     import argparse
-    import chromadb
-    from chromadb.config import Settings
+
+    from qdrant_client import QdrantClient
+
+    from src.ai.qdrant_rag_support import (
+        delete_points_by_files,
+        ensure_qdrant_collection,
+        qdrant_upsert_points,
+        rebuild_unified_collection,
+    )
+    from src.ai.indexing_config import load_indexing_base_paths
+    from src.ai.vector_backend import indexed_repo_slugs, vector_db_path
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--resume", action="store_true", help="Skip already-indexed repos")
@@ -369,28 +377,42 @@ def main():
     emb_fn._load()
     print(f"  OK: {emb_fn.model_name} ({emb_fn.dims} dims) in {time.time()-t:.1f}s\n")
 
-    # Backup/wipe DB if not resuming
-    if not resume and Path(VECTOR_DB_PATH).exists():
-        backup_path = f"{VECTOR_DB_PATH}_backup_{int(time.time())}"
-        print(f"  Backing up DB to {backup_path}...")
-        shutil.copytree(VECTOR_DB_PATH, backup_path)
-        shutil.rmtree(VECTOR_DB_PATH)
+    vp = vector_db_path()
+    print(f"  Vector DB path: {vp}\n")
 
-    # Discover repos
-    base_paths_str = args.paths or os.environ.get("REPOS_BASE_PATH", DEFAULT_PATHS)
-    base_paths = [p.strip() for p in base_paths_str.split(",") if p.strip()]
+    # Backup/wipe DB if not resuming
+    if not resume and Path(vp).exists():
+        backup_path = f"{vp}_backup_{int(time.time())}"
+        print(f"  Backing up DB to {backup_path}...")
+        shutil.copytree(vp, backup_path)
+        shutil.rmtree(vp)
+
+    # Discover repos (same folder name under different roots is allowed)
+    base_paths_str = (args.paths or os.environ.get("REPOS_BASE_PATH") or "").strip()
+    if base_paths_str:
+        sep = "," if "," in base_paths_str else ":"
+        base_paths = [p.strip() for p in base_paths_str.split(sep) if p.strip()]
+    else:
+        base_paths = load_indexing_base_paths()
+    if not base_paths:
+        print("  No scan paths: use --paths, REPOS_BASE_PATH, or config/indexing_paths.json")
+        sys.exit(1)
 
     repos = []
-    seen = set()
+    seen_resolved = set()
     for bp in base_paths:
         base = Path(bp)
         if not base.exists():
             print(f"  Warning: {bp} does not exist")
             continue
         for item in sorted(base.iterdir()):
-            if item.is_dir() and (item / ".git").exists() and item.name not in seen:
-                seen.add(item.name)
-                repos.append(item)
+            if not item.is_dir() or not (item / ".git").exists():
+                continue
+            key = str(item.resolve())
+            if key in seen_resolved:
+                continue
+            seen_resolved.add(key)
+            repos.append(item)
 
     print(f"  Found {len(repos)} repos\n")
     if not repos:
@@ -399,15 +421,9 @@ def main():
 
     # Already indexed (for --resume)
     already_indexed = set()
-    if resume and Path(VECTOR_DB_PATH).exists():
+    if resume and Path(vp).exists():
         try:
-            client_temp = chromadb.PersistentClient(path=VECTOR_DB_PATH, settings=Settings(anonymized_telemetry=False))
-            for c in client_temp.list_collections():
-                if c.name.startswith("repo_"):
-                    rn = c.name.replace("repo_", "")
-                    col = client_temp.get_collection(c.name)
-                    if col.count() > 0:
-                        already_indexed.add(rn)
+            already_indexed = indexed_repo_slugs()
         except Exception:
             pass
         if already_indexed:
@@ -429,8 +445,9 @@ def main():
         for rp in repos
     ]
 
-    # Run workers
-    client = chromadb.PersistentClient(path=VECTOR_DB_PATH, settings=Settings(anonymized_telemetry=False))
+    # Run workers (main process writes Qdrant)
+    Path(vp).mkdir(parents=True, exist_ok=True)
+    client = QdrantClient(path=vp)
     total_chunks = 0
     indexed_repos = 0
     failed_repos = 0
@@ -478,7 +495,7 @@ def main():
                 failed_repos += 1
                 continue
 
-            # Write to ChromaDB
+            # Write to Qdrant
             try:
                 col_name = f"repo_{rname}"
                 ids = res["ids"]
@@ -486,40 +503,19 @@ def main():
                 docs = res["documents"]
                 embs = res["embeddings"]
                 files_modified = res.get("files_modified", [])
+                dim = len(embs[0]) if embs else emb_fn.dims
 
                 if incremental and files_modified:
-                    # Update in place: delete chunks for modified files, then add
-                    try:
-                        col = client.get_collection(col_name, embedding_function=emb_fn)
-                        for fp in files_modified:
-                            try:
-                                col.delete(where={"file": {"$eq": fp}})
-                            except Exception:
-                                pass
-                    except Exception:
-                        col = None
-
-                if not incremental or not files_modified or col is None:
-                    try:
-                        client.delete_collection(col_name)
-                    except Exception:
-                        pass
-                    col = client.create_collection(
-                        name=col_name,
-                        embedding_function=emb_fn,
-                        metadata={"hnsw:space": "cosine", "hnsw:construction_ef": 100, "hnsw:M": 8},
-                    )
+                    if client.collection_exists(col_name):
+                        delete_points_by_files(client, col_name, files_modified)
+                    ensure_qdrant_collection(client, col_name, dim)
+                else:
+                    if client.collection_exists(col_name):
+                        client.delete_collection(collection_name=col_name)
+                    ensure_qdrant_collection(client, col_name, dim)
 
                 if ids:
-                    batch_size = 200
-                    for start in range(0, len(ids), batch_size):
-                        end = min(start + batch_size, len(ids))
-                        col.add(
-                            ids=ids[start:end],
-                            embeddings=embs[start:end],
-                            metadatas=metas[start:end],
-                            documents=docs[start:end],
-                        )
+                    qdrant_upsert_points(client, col_name, docs, embs, metas, ids)
 
                 total_chunks += res["chunk_count"]
                 indexed_repos += 1
@@ -539,41 +535,10 @@ def main():
     if failed_repos:
         print(f"  Skipped {failed_repos} repos (errors/timeout)")
 
-    # Build unified collection
     print(f"\n  Building unified collection...")
     try:
-        try:
-            client.delete_collection("unified_code")
-        except Exception:
-            pass
-        unified = client.create_collection(
-            name="unified_code", embedding_function=emb_fn, metadata={"hnsw:space": "cosine"}
-        )
-        for c in client.list_collections():
-            if not c.name.startswith("repo_"):
-                continue
-            try:
-                rname = c.name.replace("repo_", "")
-                col = client.get_collection(c.name, embedding_function=emb_fn)
-                n = col.count()
-                if n == 0:
-                    continue
-                data = col.get(include=["documents", "metadatas", "embeddings"])
-                if not data["documents"]:
-                    continue
-                ids = [f"{rname}__{j}" for j in range(len(data["documents"]))]
-                metas = [{**dict(m or {}), "repo": rname} for m in data["metadatas"]]
-                batch_size = 500
-                for s in range(0, len(ids), batch_size):
-                    e = min(s + batch_size, len(ids))
-                    kw = {"ids": ids[s:e], "documents": data["documents"][s:e], "metadatas": metas[s:e]}
-                    embs = data.get("embeddings")
-                    if embs is not None and len(embs) > 0:
-                        kw["embeddings"] = embs[s:e]
-                    unified.add(**kw)
-            except Exception as ex:
-                print(f"  Warning: skip {c.name}: {ex}")
-        print(f"  Unified: {unified.count()} chunks")
+        ucount = rebuild_unified_collection(vp, verbose=False)
+        print(f"  Unified: {ucount} chunks")
     except Exception as e:
         print(f"  Warning: unified build failed: {e}")
 

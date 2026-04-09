@@ -54,7 +54,7 @@ def explain(
     
     Args:
         retriever: RAGRetriever instance
-        question: What to explain (e.g. "how whatsapp_segregator works", "what does ProcessMessage do")
+        question: What to explain (e.g. "how payment_service works", "what does ProcessMessage do")
         repo_filter: Limit to specific repo
         n_context: Number of code chunks to retrieve (more for repo-level)
         include_diagram: Ask LLM to generate Mermaid architecture diagram

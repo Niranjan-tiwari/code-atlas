@@ -7,6 +7,8 @@ import sys
 import os
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.notifications.slack import SlackNotifier
@@ -15,22 +17,14 @@ def test_notification():
     """Test Slack notification"""
     print("🧪 Testing Slack Notification...")
     print("")
-    
+
     # Get webhook URL from environment or config
     webhook_url = os.getenv("SLACK_WEBHOOK_URL", "")
-    
+
     if not webhook_url:
-        print("❌ SLACK_WEBHOOK_URL not set")
-        print("")
-        print("Please set it:")
-        print("  export SLACK_WEBHOOK_URL='(paste URL from Slack Incoming Webhooks)'")
-        print("")
-        print("Or add it to config/notifications_config.json:")
-        print('  "slack": {')
-        print('    "enabled": true,')
-        print('    "webhook_url": "(paste from Slack)"')
-        print('  }')
-        return False
+        pytest.skip(
+            "SLACK_WEBHOOK_URL not set — export it or set slack.webhook_url in notifications_config.json"
+        )
     
     print(f"Webhook URL: {webhook_url[:50]}...")
     print("")
@@ -41,7 +35,7 @@ def test_notification():
     print("Sending test notification...")
     success = notifier.send_task_notification(
         "test_task",
-        "webhook-generation",
+        "example-service",
         "test_branch",
         "completed",
         {
@@ -63,8 +57,8 @@ def test_notification():
         print("  1. Webhook URL is correct")
         print("  2. Webhook is active in Slack")
         print("  3. Internet connection is working")
-    
-    return success
+
+    assert success, "Slack webhook send failed"
 
 if __name__ == "__main__":
     test_notification()

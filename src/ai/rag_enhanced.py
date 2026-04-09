@@ -24,6 +24,7 @@ from .hybrid_search import HybridSearcher, BM25, QueryClassifier
 from .deep_context import DeepContextBuilder
 from .cache import RAGCache, get_rag_cache
 from .code_preprocessor import CodePreprocessor
+from .vector_backend import vector_db_path as default_vector_db_path
 
 logger = logging.getLogger("rag_enhanced")
 
@@ -42,7 +43,7 @@ class EnhancedRAGRetriever:
     
     def __init__(
         self,
-        vector_db_path: str = "./data/vector_db",
+        vector_db_path: Optional[str] = None,
         llm_manager=None,
         use_hyde: bool = True,
         use_reranking: bool = True,
@@ -57,7 +58,7 @@ class EnhancedRAGRetriever:
         Initialize enhanced RAG retriever
         
         Args:
-            vector_db_path: Path to ChromaDB
+            vector_db_path: Qdrant storage directory (default: ./data/qdrant_db)
             llm_manager: LLMManager for HyDE and deep context
             use_hyde: Enable HyDE query expansion
             use_reranking: Enable cross-encoder reranking
@@ -68,6 +69,8 @@ class EnhancedRAGRetriever:
             redis_host: Redis host for L2 cache
             redis_port: Redis port for L2 cache
         """
+        if vector_db_path is None:
+            vector_db_path = default_vector_db_path()
         # Base RAG retriever
         self.base_retriever = RAGRetriever(persist_directory=vector_db_path)
         
@@ -102,7 +105,16 @@ class EnhancedRAGRetriever:
             f"GraphRAG={self.use_graphrag}, DeepContext={self.use_deep_context}, "
             f"HybridSearch={self.use_hybrid_search}, Cache={enable_cache}"
         )
-    
+
+    def close(self) -> None:
+        """Release embedded Qdrant via the base retriever."""
+        if self.base_retriever is None:
+            return
+        try:
+            self.base_retriever.close()
+        finally:
+            self.base_retriever = None
+
     def get_available_repos(self):
         """Delegate to base retriever"""
         return self.base_retriever.get_available_repos()
@@ -129,7 +141,9 @@ class EnhancedRAGRetriever:
         n_results: int = 10,
         repo_filter: Optional[str] = None,
         language_filter: Optional[str] = None,
-        language: str = "go"
+        language: str = "go",
+        retrieval_intent: Optional[str] = None,
+        fast_fanout: bool = False,
     ) -> List[Dict]:
         """
         Advanced code search with all optimizations
@@ -151,7 +165,9 @@ class EnhancedRAGRetriever:
             "n_results": n_results,
             "repo_filter": repo_filter or "",
             "language_filter": language_filter or "",
-            "language": language
+            "language": language,
+            "retrieval_intent": retrieval_intent or "",
+            "fast_fanout": fast_fanout,
         }
         if self.cache:
             cached = self.cache.get("search", query, **cache_params)
@@ -196,15 +212,21 @@ class EnhancedRAGRetriever:
             query=expanded_query,
             n_results=initial_k,
             repo_filter=repo_filter,
-            language_filter=language_filter
+            language_filter=language_filter,
+            retrieval_intent=retrieval_intent,
+            fast_fanout=fast_fanout,
         )
         
         if not vector_results:
             logger.warning("No results from vector search")
             return []
         
-        # Step 3: Hybrid search (BM25 + Vector) with dynamic weight tuning
-        if self.use_hybrid_search and len(vector_results) > 0:
+        # Step 3: Hybrid search (BM25 + Vector) — skip for semantic intent (save CPU)
+        if (
+            self.use_hybrid_search
+            and len(vector_results) > 0
+            and retrieval_intent != "semantic"
+        ):
             try:
                 # Dynamic weight tuning based on query type
                 bm25_weight, vector_weight = QueryClassifier.classify(query)
@@ -244,13 +266,13 @@ class EnhancedRAGRetriever:
             except Exception as e:
                 logger.warning(f"Hybrid search failed: {e}, using vector results only")
         
-        # Step 4: Reranking (if enabled)
-        if self.use_reranking and self.reranker:
+        # Step 4: Reranking (if enabled) — only for modest top-k (latency budget)
+        if self.use_reranking and self.reranker and n_results <= 20:
             logger.info(f"🔍 Reranking {len(vector_results)} candidates...")
             vector_results = self.reranker.rerank(query, vector_results, top_k=n_results * 2)
         
-        # Step 5: GraphRAG multi-hop (if enabled)
-        if self.use_graphrag and self.graphrag:
+        # Step 5: GraphRAG — only for explicit dependency-style queries
+        if self.use_graphrag and self.graphrag and retrieval_intent == "dependency":
             logger.info("🔍 Performing multi-hop GraphRAG retrieval...")
             vector_results = self.graphrag.multi_hop_retrieve(
                 vector_results,
@@ -272,13 +294,55 @@ class EnhancedRAGRetriever:
             self.cache.set("search", query, final_results, **cache_params)
         
         return final_results
-    
+
+    def build_context(
+        self,
+        query: str,
+        n_results: int = 5,
+        repo_filter: Optional[str] = None,
+        max_context_length: int = 8000,
+        retrieval_intent: Optional[str] = None,
+        fast_fanout: bool = False,
+    ):
+        """Assemble context string without deep-context LLM calls (latency-friendly)."""
+        results = self.search_code(
+            query=query,
+            n_results=n_results,
+            repo_filter=repo_filter,
+            retrieval_intent=retrieval_intent,
+            fast_fanout=fast_fanout,
+        )
+        if not results:
+            return "", []
+        parts, sources, total = [], [], 0
+        for i, r in enumerate(results, 1):
+            block = f"--- Source {i}: {r['repo']}/{r['file']} ({r['language']}) ---\n{r['code']}\n"
+            if total + len(block) > max_context_length:
+                break
+            parts.append(block)
+            rel = r.get("rerank_score")
+            if rel is None:
+                rel = 1.0 - (r.get("distance", 0) or 0)
+            sources.append(
+                {
+                    "index": i,
+                    "repo": r["repo"],
+                    "file": r["file"],
+                    "language": r["language"],
+                    "relevance": float(rel) if rel is not None else 0.0,
+                }
+            )
+            total += len(block)
+        return "\n".join(parts), sources
+
     def build_context_with_deep_summary(
         self,
         query: str,
         n_results: int = 10,
         repo_filter: Optional[str] = None,
-        language: str = "go"
+        language: str = "go",
+        retrieval_intent: Optional[str] = None,
+        fast_fanout: bool = False,
     ) -> Dict:
         """
         Build context with architectural summary
@@ -295,7 +359,9 @@ class EnhancedRAGRetriever:
             query=query,
             n_results=n_results,
             repo_filter=repo_filter,
-            language=language
+            language=language,
+            retrieval_intent=retrieval_intent,
+            fast_fanout=fast_fanout,
         )
         
         # Generate architectural summary

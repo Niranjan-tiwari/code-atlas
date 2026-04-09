@@ -15,6 +15,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.ai.indexing_config import load_indexing_base_paths
+from src.ai.vector_backend import repo_collection_slug
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -27,7 +30,6 @@ logging.basicConfig(
 logger = logging.getLogger("index_remaining")
 
 TIMEOUT_SECONDS = 180  # 3 minutes per repo (hard kill)
-VECTOR_DB_PATH = "./data/vector_db"
 
 # Single-repo indexing script (run as subprocess)
 SINGLE_REPO_SCRIPT = '''
@@ -44,9 +46,10 @@ logger = logging.getLogger("single_repo")
 
 repo_name = "{repo_name}"
 base_path = "{base_path}"
+slug = "{slug}"
 repo_path = Path(base_path) / repo_name
 
-logger.info(f"Loading files from {{repo_name}}...")
+logger.info(f"Loading files from {{repo_name}} (slug={{slug}})...")
 files = load_code_files(repo_path)
 if not files:
     logger.warning(f"No files found in {{repo_name}}")
@@ -54,7 +57,7 @@ if not files:
 
 logger.info(f"Found {{len(files)}} files in {{repo_name}}")
 
-db = VectorDB(collection_name=f"repo_{{repo_name}}")
+db = VectorDB(collection_name=f"repo_{{slug}}")
 batch_size = 15  # Very small batches
 all_docs, all_meta, all_ids = [], [], []
 total_chunks = 0
@@ -65,8 +68,8 @@ for idx, (file_path, content, language) in enumerate(files, 1):
         total_chunks += len(chunks)
         for ci, chunk in enumerate(chunks):
             all_docs.append(chunk)
-            all_meta.append({{"repo": repo_name, "file": str(file_path), "language": language, "chunk": ci, "total_chunks": len(chunks)}})
-            all_ids.append(f"{{repo_name}}_{{file_path}}_{{ci}}")
+            all_meta.append({{"repo": slug, "file": str(file_path), "language": language, "chunk": ci, "total_chunks": len(chunks)}})
+            all_ids.append(f"{{slug}}_{{file_path}}_{{ci}}")
         
         if len(all_docs) >= batch_size:
             db.add_documents(all_docs, all_meta, all_ids)
@@ -88,15 +91,10 @@ logger.info(f"Done: {{repo_name}} - {{info['count']}} chunks indexed")
 
 
 def get_indexed_repos():
-    """Get already indexed repos"""
-    import chromadb
-    from chromadb.config import Settings
-    client = chromadb.PersistentClient(path=VECTOR_DB_PATH, settings=Settings(anonymized_telemetry=False))
-    indexed = set()
-    for col in client.list_collections():
-        if col.name.startswith("repo_") and col.count() > 0:
-            indexed.add(col.name.replace("repo_", ""))
-    return indexed
+    """Get already indexed repos (Qdrant)."""
+    from src.ai.vector_backend import indexed_repo_slugs
+
+    return indexed_repo_slugs()
 
 
 def get_skip_list():
@@ -116,14 +114,15 @@ def discover_remaining():
     skip = get_skip_list()
     
     all_repos = []
-    for base_path in ["/path/to/your/repos", "/path/to/your/repos-alt"]:
+    for base_path in load_indexing_base_paths():
         p = Path(base_path)
         if not p.exists():
             continue
         for item in sorted(p.iterdir()):
             if item.is_dir() and (item / ".git").exists():
                 name = item.name
-                if name not in indexed and name not in skip:
+                slug = repo_collection_slug(name, base_path)
+                if slug not in indexed and name not in skip:
                     all_repos.append((name, base_path))
     
     return all_repos, indexed, skip
@@ -133,14 +132,16 @@ def index_one_repo(repo_name: str, base_path: str) -> bool:
     """Index a single repo in a subprocess with hard timeout"""
     project_root = str(Path(__file__).parent.parent)
     
+    slug = repo_collection_slug(repo_name, base_path)
     script = SINGLE_REPO_SCRIPT.format(
         project_root=project_root,
         repo_name=repo_name,
-        base_path=base_path
+        base_path=base_path,
+        slug=slug,
     )
     
     # Write temp script
-    tmp_script = f"/tmp/index_{repo_name}.py"
+    tmp_script = f"/tmp/index_{slug.replace('/', '_')}.py"
     with open(tmp_script, "w") as f:
         f.write(script)
     

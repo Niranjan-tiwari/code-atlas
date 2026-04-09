@@ -329,9 +329,9 @@ class TestAnalyzeImpact:
             ("func SendMessage(msg string) {}",
              {"repo": "messaging-core", "file": "send.go", "language": "GO"}),
             ("import (\n    \"messaging-core\"\n)\nfunc relay() {\n    SendMessage(\"hello\")\n}",
-             {"repo": "rcs-sender", "file": "relay.go", "language": "GO"}),
+             {"repo": "delivery-sender", "file": "relay.go", "language": "GO"}),
             ("err := SendMessage(payload)\nif err != nil { return err }",
-             {"repo": "whatsapp-sender", "file": "dispatch.go", "language": "GO"}),
+             {"repo": "notifications-sender", "file": "dispatch.go", "language": "GO"}),
         ]
         retriever = _make_mock_retriever(chunks)
         result = analyze_impact(retriever, "SendMessage")
@@ -339,7 +339,7 @@ class TestAnalyzeImpact:
         summary = result["summary"]
         assert summary["total_affected_repos"] >= 2
         affected_repos = summary["repos"]
-        assert "rcs-sender" in affected_repos or "whatsapp-sender" in affected_repos
+        assert "delivery-sender" in affected_repos or "notifications-sender" in affected_repos
 
     def test_summary_structure(self):
         chunks = [

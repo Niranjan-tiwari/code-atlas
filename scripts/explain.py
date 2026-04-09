@@ -4,15 +4,15 @@ Explain code, functions, or entire repos - with optional architecture diagram.
 
 Usage:
   # Explain how a repo works (end-to-end)
-  python3 scripts/explain.py "how whatsapp_segregator works"
-  python3 scripts/explain.py "how does whatsapp_segregator repo work" --repo whatsapp-segregator --diagram
+  python3 scripts/explain.py "how payment_service works"
+  python3 scripts/explain.py "how does payment_service work" --repo payment-service --diagram
 
   # Explain a function or logic
-  python3 scripts/explain.py "what does ProcessMessage do in whatsapp-segregator"
+  python3 scripts/explain.py "what does ProcessMessage do in payment-service"
   python3 scripts/explain.py "explain the error handling flow" --repo go-es-gateway
 
   # With Mermaid architecture diagram
-  python3 scripts/explain.py "how whatsapp_segregator works" --diagram
+  python3 scripts/explain.py "how payment_service works" --diagram
 
   # Non-interactive (for scripting)
   python3 scripts/explain.py -q "how the webhook flow works"
@@ -81,7 +81,7 @@ def main():
     parser.add_argument(
         "question",
         nargs="?",
-        help="What to explain (e.g. 'how whatsapp_segregator works', 'what does ProcessMessage do')",
+        help="What to explain (e.g. 'how payment_service works', 'what does ProcessMessage do')",
     )
     parser.add_argument(
         "-q", "--query",
@@ -89,7 +89,7 @@ def main():
     )
     parser.add_argument(
         "-r", "--repo",
-        help="Limit to specific repo (e.g. whatsapp-segregator)",
+        help="Limit to specific repo (e.g. payment-service)",
     )
     parser.add_argument(
         "-d", "--diagram",
@@ -104,7 +104,7 @@ def main():
     )
     parser.add_argument(
         "--db-path",
-        default="./data/vector_db",
+        default="./data/qdrant_db",
         help="Vector DB path",
     )
     
@@ -114,8 +114,8 @@ def main():
     if not question:
         print(__doc__)
         print("\nExamples:")
-        print('  python3 scripts/explain.py "how whatsapp_segregator works" --diagram')
-        print('  python3 scripts/explain.py "what does ProcessMessage do" -r whatsapp-segregator')
+        print('  python3 scripts/explain.py "how payment_service works" --diagram')
+        print('  python3 scripts/explain.py "what does ProcessMessage do" -r payment-service')
         sys.exit(1)
     
     print(f"{C.CYAN}{C.BOLD}🔍 Explain: {question}{C.RESET}")

@@ -557,9 +557,12 @@ class TestPipelineIntegration:
 
     def test_enhanced_rag_init_no_crash(self):
         """EnhancedRAGRetriever should initialize without crashing"""
+        from tests.qdrant_helpers import skip_if_embedded_qdrant_locked
+
+        skip_if_embedded_qdrant_locked("./data/qdrant_db")
         from src.ai.rag_enhanced import EnhancedRAGRetriever
         retriever = EnhancedRAGRetriever(
-            vector_db_path="./data/vector_db",
+            vector_db_path="./data/qdrant_db",
             llm_manager=None,
             use_hyde=False,
             use_reranking=True,
@@ -573,9 +576,12 @@ class TestPipelineIntegration:
 
     def test_enhanced_rag_cache_stats(self):
         """Cache stats should be accessible"""
+        from tests.qdrant_helpers import skip_if_embedded_qdrant_locked
+
+        skip_if_embedded_qdrant_locked("./data/qdrant_db")
         from src.ai.rag_enhanced import EnhancedRAGRetriever
         retriever = EnhancedRAGRetriever(
-            vector_db_path="./data/vector_db",
+            vector_db_path="./data/qdrant_db",
             llm_manager=None,
             use_hyde=False,
             use_deep_context=False,
@@ -586,9 +592,12 @@ class TestPipelineIntegration:
 
     def test_enhanced_rag_invalidate_cache(self):
         """Cache invalidation should not crash"""
+        from tests.qdrant_helpers import skip_if_embedded_qdrant_locked
+
+        skip_if_embedded_qdrant_locked("./data/qdrant_db")
         from src.ai.rag_enhanced import EnhancedRAGRetriever
         retriever = EnhancedRAGRetriever(
-            vector_db_path="./data/vector_db",
+            vector_db_path="./data/qdrant_db",
             llm_manager=None,
             use_hyde=False,
             use_deep_context=False,

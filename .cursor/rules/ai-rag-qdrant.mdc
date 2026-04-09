@@ -1,0 +1,30 @@
+---
+description: RAG, Qdrant embedded, query engine, LLM manager conventions
+globs: src/ai/**/*.py,scripts/query_code.py,scripts/start_api.py,scripts/index*.py,scripts/*index*.py,scripts/build_unified_index.py,src/api/search_api.py,tests/test_rag*.py,tests/qdrant_helpers.py
+alwaysApply: false
+---
+
+# AI / RAG / Qdrant
+
+## Clients
+
+- Open Qdrant via **`vector_backend.open_embedded_qdrant_client`** (or helpers in `vector_db.py` / `rag.py`) — prefer shared helpers over ad-hoc paths.
+- **`QdrantEmbeddedLockError`**: surface a clear message; avoid holding the client after shutdown.
+
+## Lifecycle
+
+- **`QueryEngine.shutdown()`** should run on exit / SIGTERM where the engine is long-lived (e.g. `query_code.py` uses try/finally + signal).
+- RAG classes: call **`close()`** on retriever/client when present so embedded Qdrant releases the lock.
+
+## LLM
+
+- **`src/ai/llm/manager.py`**: provider selection from **`config/ai_config.json`** + env; disabled providers must not be silently substituted — follow existing explicit-provider behavior.
+- Provider name alias: **`claude` → anthropic`** where already implemented.
+
+## Config
+
+- Embedding model and LLM routing live in **`ai_config.json`**; paths and index roots in **`indexing_paths.json`** / **`config.json`**.
+
+## Tests
+
+- Integration tests may skip without a writable Qdrant path or when the DB is locked; use **`tests/qdrant_helpers.py`** patterns if extending.

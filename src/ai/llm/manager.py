@@ -14,6 +14,7 @@ from .openai_provider import OpenAIProvider
 from .anthropic_provider import AnthropicProvider
 from .gemini_provider import GeminiProvider
 from .ollama_provider import OllamaProvider
+from .groq_provider import GroqProvider
 
 
 class LLMManager:
@@ -49,6 +50,16 @@ class LLMManager:
             except Exception as e:
                 self.logger.warning(f"Error loading config: {e}")
         
+        # Groq (env GROQ_API_KEY) — register before others when key present
+        groq_cfg = config.get("groq", {})
+        if groq_cfg.get("enabled", True):
+            groq_key = os.environ.get("GROQ_API_KEY", groq_cfg.get("api_key", ""))
+            groq_model = groq_cfg.get("model", "llama-3.3-70b-versatile")
+            provider = GroqProvider(api_key=groq_key or None, model=groq_model)
+            if provider.is_available():
+                self.providers["groq"] = provider
+                self.logger.info(f"✅ Groq provider ready: {groq_model}")
+
         # Initialize OpenAI
         openai_key = os.environ.get("OPENAI_API_KEY", config.get("openai", {}).get("api_key", ""))
         openai_model = config.get("openai", {}).get("model", "gpt-4o-mini")
@@ -73,18 +84,21 @@ class LLMManager:
             self.providers["gemini"] = provider
             self.logger.info(f"✅ Gemini provider ready: {gemini_model}")
         
-        # Initialize Ollama (local LLM, no API key needed) - TRIED FIRST!
+        # Ollama (local LLM) — off when llm.ollama.enabled is false
         ollama_config = config.get("ollama", {})
-        ollama_url = ollama_config.get("base_url", "http://localhost:11434")
-        ollama_model = ollama_config.get("model", "qwen2.5-coder:1.5b")
-        provider = OllamaProvider(base_url=ollama_url, model=ollama_model)
-        if provider.is_available():
-            self.providers["ollama"] = provider
-            self.logger.info(f"✅ Ollama provider ready: {ollama_model} (local, free)")
+        if ollama_config.get("enabled", True):
+            ollama_url = ollama_config.get("base_url", "http://localhost:11434")
+            ollama_model = ollama_config.get("model", "qwen2.5-coder:1.5b")
+            provider = OllamaProvider(base_url=ollama_url, model=ollama_model)
+            if provider.is_available():
+                self.providers["ollama"] = provider
+                self.logger.info(f"✅ Ollama provider ready: {ollama_model} (local, free)")
         
-        # Set fallback chain based on config or available providers
-        # Default: Try Ollama (local, free) FIRST, then API providers
-        configured_chain = config.get("fallback_chain", ["ollama", "openai", "anthropic", "gemini"])
+        # Fallback chain: prefer Groq → Ollama → cloud APIs (only registered providers kept)
+        configured_chain = config.get(
+            "fallback_chain",
+            ["groq", "ollama", "openai", "anthropic", "gemini"],
+        )
         self.fallback_chain = [p for p in configured_chain if p in self.providers]
         
         if not self.providers:
@@ -94,13 +108,10 @@ class LLMManager:
             self.logger.warning("      - Install: https://ollama.ai")
             self.logger.warning("      - Start: ollama serve")
             self.logger.warning("      - Pull model: ollama pull codellama")
-            self.logger.warning("   2. Set API keys: export OPENAI_API_KEY=sk-...")
+            self.logger.warning("   2. export GROQ_API_KEY=gsk_... or OPENAI_API_KEY=sk-...")
         else:
             chain_str = ' → '.join(self.fallback_chain)
-            if self.fallback_chain and self.fallback_chain[0] == "ollama":
-                self.logger.info(f"📋 Fallback chain: {chain_str} (Ollama first - free & local!)")
-            else:
-                self.logger.info(f"📋 Fallback chain: {chain_str}")
+            self.logger.info(f"📋 Fallback chain: {chain_str}")
     
     def generate(
         self,
@@ -126,18 +137,42 @@ class LLMManager:
         """
         if not self.providers:
             raise RuntimeError(
-                "No LLM providers available. Set at least one API key:\n"
+                "No LLM providers available:\n"
+                "  export GROQ_API_KEY=gsk_...  # or start Ollama\n"
                 "  export OPENAI_API_KEY=sk-...\n"
                 "  export ANTHROPIC_API_KEY=sk-ant-...\n"
                 "  export GEMINI_API_KEY=AI..."
             )
-        
-        # Use specified provider or fallback chain
-        providers_to_try = []
-        if provider and provider in self.providers:
+
+        if isinstance(provider, str):
+            provider = provider.strip().lower()
+            if provider in ("", "auto"):
+                provider = None
+            elif provider == "claude":
+                provider = "anthropic"
+
+        # Explicit provider: do not silently fall back (avoids e.g. hanging on Ollama)
+        providers_to_try: List[str]
+        if provider:
+            if provider not in self.providers:
+                avail = ", ".join(sorted(self.providers.keys()))
+                hint = {
+                    "openai": "export OPENAI_API_KEY=sk-...",
+                    "anthropic": "export ANTHROPIC_API_KEY=sk-ant-...",
+                    "gemini": "export GEMINI_API_KEY=...",
+                    "groq": "export GROQ_API_KEY=gsk_...",
+                    "ollama": "start Ollama: ollama serve (and ensure the model is pulled)",
+                }.get(provider, "")
+                extra = f"\n  {hint}" if hint else ""
+                raise RuntimeError(
+                    f"LLM provider {provider!r} is not available (missing key, disabled in config, or unreachable).\n"
+                    f"  Configured right now: {avail}{extra}"
+                )
             providers_to_try = [provider]
         else:
-            providers_to_try = self.fallback_chain if self.fallback_chain else list(self.providers.keys())
+            providers_to_try = (
+                self.fallback_chain if self.fallback_chain else list(self.providers.keys())
+            )
         
         last_error = None
         for provider_name in providers_to_try:

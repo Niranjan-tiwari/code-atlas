@@ -26,6 +26,8 @@ class SearchAPIHandler(BaseHTTPRequestHandler):
     
     retriever = None  # Set by server
     llm = None
+    _query_engine = None  # Lazy singleton (shares retriever's Qdrant handle)
+    _query_lock = threading.Lock()  # Serialized queries for embedded Qdrant safety
     
     def log_message(self, format, *args):
         logger.debug(f"{self.address_string()} {format % args}")
@@ -190,7 +192,7 @@ class SearchAPIHandler(BaseHTTPRequestHandler):
                 streaming = StreamingRAGSearch(self._enhanced_retriever)
             else:
                 enhanced = EnhancedRAGRetriever(
-                    vector_db_path="./data/vector_db",
+                    vector_db_path="./data/qdrant_db",
                     use_hyde=False,
                     use_deep_context=False
                 )
@@ -241,21 +243,44 @@ class SearchAPIHandler(BaseHTTPRequestHandler):
     # === POST endpoints ===
     
     def _query(self, body):
-        """RAG + LLM query"""
+        """RAG + LLM query (one shared QueryEngine; lock for embedded Qdrant)."""
         q = body.get("query", "")
         repo = body.get("repo")
         if not q:
             self._json({"error": "Missing 'query' field"}, 400)
             return
-        
+        if self.retriever is None:
+            self._json({"error": "Retriever not initialized"}, 503)
+            return
+
         from src.ai.query_engine import QueryEngine
-        engine = QueryEngine(vector_db_path="./data/vector_db")
-        result = engine.query(q, repo_filter=repo)
+        from src.ai.vector_backend import vector_db_path
+
+        # Default false: shared API process must not mix users in engine.history
+        include_history = body.get("include_history", False)
+        if not isinstance(include_history, bool):
+            include_history = False
+
+        with SearchAPIHandler._query_lock:
+            if SearchAPIHandler._query_engine is None:
+                SearchAPIHandler._query_engine = QueryEngine(
+                    vector_db_path=vector_db_path(),
+                    retriever=self.retriever,
+                )
+            engine = SearchAPIHandler._query_engine
+            result = engine.query(
+                q,
+                repo_filter=repo,
+                include_history=include_history,
+            )
         self._json({
             "answer": result.answer,
             "sources": result.sources,
             "model": result.model,
-            "tokens": result.tokens_used
+            "provider": result.provider,
+            "tokens": result.tokens_used,
+            "cache_hit": result.cache_hit,
+            "latency_seconds": result.latency_seconds,
         })
     
     def _explain(self, body):
@@ -545,27 +570,48 @@ class ReusableHTTPServer(HTTPServer):
         super().server_close()
 
 
-def _kill_process_on_port(port: int) -> bool:
-    """Find and kill the process occupying *port*. Returns True if a process was killed."""
+def _pids_listening_on_port(port: int) -> list[int]:
+    """PIDs with a TCP listener on *port* (best effort via lsof)."""
     try:
         result = subprocess.run(
             ["lsof", "-ti", f":{port}"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
-        pids = result.stdout.strip().split()
-        if not pids:
-            return False
-        for pid in pids:
-            pid = int(pid)
-            if pid == os.getpid():
+        out = []
+        for p in result.stdout.strip().split():
+            try:
+                pid = int(p)
+            except ValueError:
                 continue
-            logger.info(f"Killing stale process {pid} on port {port}")
-            os.kill(pid, signal.SIGTERM)
-        time.sleep(0.5)
-        return True
-    except Exception as exc:
-        logger.debug(f"Could not kill process on port {port}: {exc}")
+            if pid != os.getpid():
+                out.append(pid)
+        return out
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return []
+
+
+def _kill_process_on_port(port: int, *, force: bool = False) -> bool:
+    """
+    Stop processes listening on *port*.
+    Tries SIGTERM first; with force=True or a second call, uses SIGKILL.
+    """
+    pids = _pids_listening_on_port(port)
+    if not pids:
         return False
+    sig = signal.SIGKILL if force else signal.SIGTERM
+    for pid in pids:
+        try:
+            logger.info("Stopping process %s on port %s (%s)", pid, port, "SIGKILL" if force else "SIGTERM")
+            os.kill(pid, sig)
+        except ProcessLookupError:
+            pass
+        except PermissionError as exc:
+            logger.warning("Cannot signal pid %s (try: fuser -k %s/tcp or sudo): %s", pid, port, exc)
+    # Give the kernel time to release the socket (especially after SIGKILL)
+    time.sleep(1.2 if force else 0.8)
+    return True
 
 
 def start_search_api(host="0.0.0.0", port=8888):
@@ -576,21 +622,36 @@ def start_search_api(host="0.0.0.0", port=8888):
     from src.ai.rag import RAGRetriever
 
     print(f"Loading RAG retriever...", flush=True)
-    retriever = RAGRetriever(persist_directory="./data/vector_db")
+    retriever = RAGRetriever(persist_directory="./data/qdrant_db")
     SearchAPIHandler.retriever = retriever
 
-    # Try to bind; if port is busy, auto-kill the stale process and retry
-    for attempt in range(2):
+    # Try to bind; if port is busy, stop stale listeners and retry (TERM then KILL)
+    server = None
+    for attempt in range(5):
         try:
             server = ReusableHTTPServer((host, port), SearchAPIHandler)
             break
         except OSError as e:
-            if e.errno == 98 and attempt == 0:  # Address already in use
-                print(f"Port {port} is in use — killing stale process...", flush=True)
-                if _kill_process_on_port(port):
-                    time.sleep(0.5)
-                    continue
-            raise
+            if e.errno != 98:  # Address already in use
+                raise
+            if attempt >= 4:
+                print(
+                    f"\nPort {port} is still in use after cleanup attempts.\n"
+                    f"  Run:  fuser -k {port}/tcp   or   lsof -i :{port}\n"
+                    f"  Or start on another port:  python3 scripts/start_api.py --port 8890\n",
+                    flush=True,
+                )
+                raise
+            force = attempt >= 2
+            print(
+                f"Port {port} is in use — {'force-killing' if force else 'stopping'} stale listener(s)...",
+                flush=True,
+            )
+            _kill_process_on_port(port, force=force)
+            if not _pids_listening_on_port(port):
+                time.sleep(0.3)
+
+    assert server is not None
 
     # Graceful shutdown on SIGINT / SIGTERM
     def _shutdown(signum, frame):

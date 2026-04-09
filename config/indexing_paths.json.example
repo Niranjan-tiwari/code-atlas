@@ -1,0 +1,9 @@
+{
+  "_readme": "Copy to indexing_paths.json (gitignored). List the directories that contain your cloned repos (each subfolder with .git is indexed).",
+  "base_paths": [
+    "/path/to/workspace-1",
+    "/path/to/workspace-2",
+    "/path/to/workspace-3",
+    "/path/to/workspace-4"
+  ]
+}

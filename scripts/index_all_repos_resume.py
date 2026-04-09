@@ -7,20 +7,24 @@ Handles interruptions and continues from where it left off
 import sys
 import os
 import logging
+import subprocess
 from pathlib import Path
 from typing import List, Set
 import time
 import json
 import gc  # Garbage collection
-import psutil  # System monitoring
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
-import threading
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.index_one_repo import load_code_files, chunk_code
 from src.ai.vector_db import VectorDB
-import chromadb
+from src.ai.vector_backend import (
+    count_all_repo_chunks,
+    indexed_repo_slugs,
+    repo_collection_name,
+    repo_collection_slug,
+)
+from src.ai.indexing_config import load_indexing_base_paths
 
 # Setup logging
 log_file = Path("logs/indexing_bulk.log")
@@ -38,24 +42,15 @@ logger = logging.getLogger("index_all_repos_resume")
 
 
 def get_indexed_repos() -> Set[str]:
-    """Get list of already indexed repositories"""
-    indexed = set()
+    """Get list of already indexed repositories (Qdrant repo_* collections)."""
     try:
-        client = chromadb.PersistentClient(path='./data/vector_db')
-        collections = client.list_collections()
-        
-        for collection in collections:
-            name = collection.name
-            if name.startswith('repo_'):
-                repo_name = name.replace('repo_', '')
-                # Check if collection has documents
-                if collection.count() > 0:
-                    indexed.add(repo_name)
-                    logger.info(f"Found indexed repo: {repo_name} ({collection.count()} docs)")
+        indexed = indexed_repo_slugs()
+        for repo_name in sorted(indexed):
+            logger.info(f"Found indexed repo: {repo_name}")
+        return indexed
     except Exception as e:
         logger.warning(f"Error checking indexed repos: {e}")
-    
-    return indexed
+        return set()
 
 
 def discover_repos(base_path: str) -> List[str]:
@@ -85,9 +80,11 @@ def index_repo_robust(repo_name: str, base_path: str, collection_name: str = Non
     
     if not repo_path.exists():
         logger.error(f"Repository not found: {repo_path}")
+        _emit_subprocess_reason("repo_path_missing")
         return False
     
-    collection = collection_name or f"repo_{repo_name}"
+    slug = repo_collection_slug(repo_name, base_path)
+    collection = collection_name or repo_collection_name(repo_name, base_path)
     
     try:
         logger.info(f"📂 Loading code files from {repo_name}...")
@@ -95,6 +92,7 @@ def index_repo_robust(repo_name: str, base_path: str, collection_name: str = Non
         
         if not files:
             logger.warning(f"No code files found in {repo_name}")
+            _emit_subprocess_reason("no_matching_source_files")
             return False
         
         # Group by language
@@ -128,10 +126,10 @@ def index_repo_robust(repo_name: str, base_path: str, collection_name: str = Non
                 # Note: Will be added to skip list by caller
                 return False
             
-            # Log progress every 10 files
+            # Log progress every 10 files; always advance stall clock so huge single files don't false-timeout
             if file_idx % 10 == 0:
                 logger.info(f"   📄 Processing file {file_idx}/{len(files)}...")
-                last_log_time = time.time()
+            last_log_time = time.time()
             
             try:
                 chunks = chunk_code(content, language=language)
@@ -141,13 +139,13 @@ def index_repo_robust(repo_name: str, base_path: str, collection_name: str = Non
                 for chunk_idx, chunk in enumerate(chunks):
                     all_documents.append(chunk)
                     all_metadatas.append({
-                        "repo": repo_name,
+                        "repo": slug,
                         "file": str(file_path),
                         "language": language,
                         "chunk": chunk_idx,
                         "total_chunks": len(chunks)
                     })
-                    all_ids.append(f"{repo_name}_{file_path}_{chunk_idx}")
+                    all_ids.append(f"{slug}_{file_path}_{chunk_idx}")
                 
                 # Add in batches to avoid memory issues
                 if len(all_documents) >= batch_size:
@@ -212,6 +210,7 @@ def index_repo_robust(repo_name: str, base_path: str, collection_name: str = Non
         
     except Exception as e:
         logger.error(f"❌ Error indexing {repo_name}: {e}", exc_info=True)
+        _emit_subprocess_reason("exception")
         return False
 
 
@@ -278,12 +277,103 @@ def add_to_skip_list(repo_name: str, reason: str, files_count: int = None, langu
         logger.error(f"Error saving skip list: {e}")
 
 
-def index_all_repos_resume():
-    """Index all repos with resume capability"""
-    paths = [
-        "/path/to/your/repos",
-        "/path/to/your/repos-alt"
-    ]
+def _subprocess_indexing_env(project_root: Path) -> dict:
+    """Quieter Hugging Face / tokenizers; same PYTHONPATH."""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(project_root)
+    env["ATLAS_INDEX_SUBPROCESS_CHILD"] = "1"
+    env.setdefault("TRANSFORMERS_VERBOSITY", "error")
+    env.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    env.setdefault("TOKENIZERS_PARALLELISM", "false")
+    return env
+
+
+def _emit_subprocess_reason(reason: str) -> None:
+    """One-line stderr for parent to classify failures (child only)."""
+    if os.environ.get("ATLAS_INDEX_SUBPROCESS_CHILD"):
+        print(f"ATLAS_INDEX_REASON={reason}", file=sys.stderr, flush=True)
+
+
+def _format_subprocess_failure(repo_name: str, returncode: int, stderr: str, stdout: str) -> str:
+    """Avoid logging megabytes of captured INFO as ERROR; classify empty repos."""
+    blob = (stderr or "") + "\n" + (stdout or "")
+    for line in (stderr or "").splitlines():
+        if line.strip().startswith("ATLAS_INDEX_REASON="):
+            code = line.split("=", 1)[-1].strip()
+            if code == "no_matching_source_files":
+                return "no indexable files (go/py/js/ts/java) — add skip_repos or extend load_code_files"
+            if code == "repo_path_missing":
+                return "repository path missing"
+            if code == "exception":
+                return "exception during indexing (see logs/indexing_bulk.log)"
+            return f"child reported: {code}"
+    if "No code files found" in blob:
+        return f"no indexable files (go/py/js/ts/java) — add skip_repos or extend load_code_files"
+    # Real errors often on stderr; keep last non-empty lines
+    lines = [ln.strip() for ln in blob.splitlines() if ln.strip() and " - INFO - " not in ln]
+    tail = "\n".join(lines[-12:]) if lines else ""
+    return tail[-1500:].strip() or f"exit {returncode}"
+
+
+def _warm_shared_embeddings() -> None:
+    """Load embedding model once before in-process bulk loop."""
+    try:
+        from src.ai.embeddings.ollama_embed import get_best_embedding_function
+
+        fn = get_best_embedding_function()
+        if fn:
+            fn(["__index_warmup__"])
+            logger.info("✅ Embedding model warmed (singleton; reused for each repo in this process)")
+    except Exception as e:
+        logger.warning(f"Warmup skipped: {e}")
+
+
+def _run_one_repo_subprocess(
+    repo_name: str,
+    base_path: str,
+    repo_timeout_sec: int,
+    project_root: Path,
+) -> tuple[bool, str]:
+    """Run indexing in a child process; on timeout the child is killed (unlike daemon threads)."""
+    helper = project_root / "scripts" / "_bulk_index_single.py"
+    env = _subprocess_indexing_env(project_root)
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(helper), repo_name, base_path],
+            cwd=str(project_root),
+            env=env,
+            timeout=repo_timeout_sec if repo_timeout_sec > 0 else None,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0:
+            return True, ""
+        detail = _format_subprocess_failure(
+            repo_name, proc.returncode, proc.stderr or "", proc.stdout or ""
+        )
+        return False, detail
+    except subprocess.TimeoutExpired:
+        return False, f"timeout after {repo_timeout_sec}s (process killed)"
+
+
+def index_all_repos_resume(
+    paths: list[str] | None = None,
+    *,
+    repo_timeout_sec: int | None = None,
+    use_subprocess: bool = True,
+    build_unified: bool = False,
+):
+    """Index all repos with resume capability."""
+    project_root = Path(__file__).resolve().parent.parent
+    if repo_timeout_sec is None:
+        repo_timeout_sec = int(os.environ.get("INDEX_REPO_TIMEOUT_SEC", "3600"))
+    paths = paths if paths is not None else load_indexing_base_paths()
+    if not paths:
+        logger.error(
+            "No base paths: create config/indexing_paths.json from "
+            "config/indexing_paths.json.example or set CODE_ATLAS_INDEX_PATHS"
+        )
+        return
     
     logger.info("=" * 80)
     logger.info("🚀 Starting Resume-Capable Bulk Indexing")
@@ -312,11 +402,14 @@ def index_all_repos_resume():
         for repo in repos:
             all_repos.append((repo, base_path))
     
-    # Filter out already indexed repos and skipped repos
-    repos_to_index = [
-        (repo, path) for repo, path in all_repos 
-        if repo not in indexed_repos and repo not in skip_list
-    ]
+    # Filter: skip by folder name (skip_list) or by full collection slug (indexed)
+    repos_to_index = []
+    for repo, path in all_repos:
+        if repo in skip_list:
+            continue
+        if repo_collection_slug(repo, path) in indexed_repos:
+            continue
+        repos_to_index.append((repo, path))
     
     logger.info(f"📊 Total repos: {len(all_repos)}")
     logger.info(f"📊 Already indexed: {len(indexed_repos)}")
@@ -327,9 +420,14 @@ def index_all_repos_resume():
     if not repos_to_index:
         logger.info("✅ All repositories already indexed!")
         return
-    
+
+    if not use_subprocess:
+        logger.info("⚡ In-process mode: one embedding model for all repos (faster; use subprocess if a repo hangs)")
+        _warm_shared_embeddings()
+
     successful = 0
     failed = 0
+    skipped_no_code = 0
     start_time = time.time()
     
     for i, (repo_name, base_path) in enumerate(repos_to_index, 1):
@@ -347,41 +445,26 @@ def index_all_repos_resume():
             pass
         
         repo_start = time.time()
-        
-        # Use threading timeout to prevent stuck repos (5 minutes max)
-        success = False
-        result_container = {'success': False, 'error': None}
-        
-        def run_indexing():
-            try:
-                result_container['success'] = index_repo_robust(repo_name, base_path)
-            except Exception as e:
-                result_container['error'] = str(e)
-                result_container['success'] = False
-        
-        # Run with 5 minute timeout per repo
-        indexing_thread = threading.Thread(target=run_indexing, daemon=True)
-        indexing_thread.start()
-        indexing_thread.join(timeout=300)  # 5 minutes timeout
-        
-        repo_time = time.time() - repo_start
-        
-        # Check if thread is still alive (timed out)
-        if indexing_thread.is_alive():
-            logger.error(f"⏱️  TIMEOUT: {repo_name} exceeded 5 minute timeout, skipping...")
-            logger.error(f"   Time taken: {repo_time/60:.1f} minutes")
-            logger.error(f"   Skipping and continuing to next repo...")
-            success = False
+        err_detail = ""
+        if use_subprocess:
+            success, err_detail = _run_one_repo_subprocess(
+                repo_name, base_path, repo_timeout_sec, project_root
+            )
+            if err_detail:
+                if "no indexable files" in err_detail:
+                    logger.warning(f"⏭️  {repo_name}: {err_detail[:300]}")
+                else:
+                    logger.error(f"❌ {repo_name}: {err_detail[:800]}")
         else:
-            success = result_container['success']
-            if result_container['error']:
-                logger.error(f"❌ Error: {result_container['error']}")
-        
-        # If repo took too long (>5 minutes), mark as failed
-        if repo_time > 300:  # 5 minutes
-            logger.warning(f"⚠️  {repo_name} took {repo_time/60:.1f} minutes - very slow")
-            if not success:
-                logger.warning(f"   Marking as failed and continuing...")
+            try:
+                success = index_repo_robust(repo_name, base_path)
+            except Exception as e:
+                logger.error(f"❌ {repo_name}: {e}")
+                success = False
+
+        repo_time = time.time() - repo_start
+        if repo_time > 600 and not success:
+            logger.warning(f"⚠️  {repo_name} ran {repo_time/60:.1f} min then failed or timed out — continuing")
         
         # Force GC after each repo to free memory
         gc.collect()
@@ -393,8 +476,12 @@ def index_all_repos_resume():
             successful += 1
             logger.info(f"✅ {repo_name} completed in {repo_time:.1f}s")
         else:
-            failed += 1
-            logger.error(f"❌ {repo_name} failed after {repo_time:.1f}s")
+            if use_subprocess and err_detail and "no indexable files" in err_detail:
+                skipped_no_code += 1
+                logger.warning(f"⏭️  {repo_name}: no matching source files after {repo_time:.1f}s")
+            else:
+                failed += 1
+                logger.error(f"❌ {repo_name} failed after {repo_time:.1f}s")
         
         # Progress update
         elapsed = time.time() - start_time
@@ -412,6 +499,7 @@ def index_all_repos_resume():
     logger.info("📊 INDEXING SUMMARY")
     logger.info("=" * 80)
     logger.info(f"✅ Successful: {successful}")
+    logger.info(f"⏭️  No matching source files: {skipped_no_code}")
     logger.info(f"❌ Failed: {failed}")
     logger.info(f"⏭️  Skipped: {len(skip_list)}")
     logger.info(f"📁 Total processed: {len(repos_to_index)}")
@@ -425,20 +513,67 @@ def index_all_repos_resume():
     
     # Final status
     try:
-        client = chromadb.PersistentClient(path='./data/vector_db')
-        collections = client.list_collections()
-        total_docs = sum(c.count() for c in collections if c.name.startswith('repo_'))
+        total_docs = count_all_repo_chunks()
         logger.info(f"📊 Total documents in vector DB: {total_docs}")
     except Exception as e:
         logger.warning(f"Error getting final count: {e}")
     
     logger.info("=" * 80)
 
+    if build_unified:
+        logger.info("🔧 Building unified_code collection...")
+        try:
+            from src.ai.qdrant_rag_support import rebuild_unified_collection
+            from src.ai.vector_backend import vector_db_path
+
+            n = rebuild_unified_collection(vector_db_path(), verbose=True)
+            logger.info(f"✅ unified_code: {n} points")
+        except Exception as e:
+            logger.error(f"❌ unified_code build failed: {e}", exc_info=True)
+
 
 if __name__ == "__main__":
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Bulk index Git repos into Qdrant")
+    ap.add_argument(
+        "--paths",
+        type=str,
+        default="",
+        help="Comma-separated base directories (overrides config / env)",
+    )
+    ap.add_argument(
+        "--repo-timeout",
+        type=int,
+        default=None,
+        help="Seconds per repo (0 = no limit). Default: INDEX_REPO_TIMEOUT_SEC or 3600",
+    )
+    ap.add_argument(
+        "--no-subprocess",
+        action="store_true",
+        help="Index in-process: load embedding model once (fast). Env: INDEX_BULK_IN_PROCESS=1. "
+        "Default is subprocess per repo (survives hangs via timeout).",
+    )
+    ap.add_argument(
+        "--build-unified",
+        action="store_true",
+        help="After all repos, merge repo_* into unified_code",
+    )
+    args = ap.parse_args()
+    override = [p.strip() for p in args.paths.split(",") if p.strip()] or None
+    in_process = args.no_subprocess or os.environ.get("INDEX_BULK_IN_PROCESS", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     try:
         logger.info("🚀 Starting resume-capable bulk indexing...")
-        index_all_repos_resume()
+        index_all_repos_resume(
+            paths=override,
+            repo_timeout_sec=args.repo_timeout,
+            use_subprocess=not in_process,
+            build_unified=args.build_unified,
+        )
         logger.info("\n✅ Bulk indexing completed!")
     except KeyboardInterrupt:
         logger.info("\n⚠️  Indexing interrupted by user")

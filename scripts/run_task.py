@@ -8,11 +8,11 @@ Supports CLI arguments, JSON task files, and interactive mode.
 Usage:
   # CLI mode - create branches across 5 repos
   python3 scripts/run_task.py \
-    --repos whatsapp,wa-payment-polling,go-rcs-reporting \
-    --jira CPASS-1234 \
+    --repos service-alpha,service-beta,service-gamma \
+    --jira PROJ-1234 \
     --description "Add health check endpoint" \
     --source master \
-    --branch feature/CPASS-1234-health-check \
+    --branch feature/PROJ-1234-health-check \
     --base-path /path/to/your/repos \
     --branch-only
 
@@ -27,11 +27,11 @@ Usage:
 
   # Multiple base paths
   python3 scripts/run_task.py \
-    --repos whatsapp,go-rcs-reporting \
-    --jira CPASS-1234 \
+    --repos service-alpha,service-gamma \
+    --jira PROJ-1234 \
     --description "Fix logging" \
     --source master \
-    --branch feature/CPASS-1234-logging \
+    --branch feature/PROJ-1234-logging \
     --base-path /path/to/your/repos \
     --base-path /path/to/your/repos-alt
 """
@@ -68,8 +68,8 @@ def load_base_paths_config() -> dict:
     Load base_paths_config from config/config.json.
     Returns dict mapping path -> default_branch.
     
-    Rule: netcore_cpass_whatsapp repos branch from 'master',
-          netcore_cpass_rcs repos branch from 'main'.
+    Each workspace directory can set default_branch in config/config.json
+    (base_paths_config).
     """
     branch_rules = {}
     config_path = Path(project_root) / "config" / "config.json"
@@ -92,9 +92,7 @@ def discover_all_repos(base_paths: list) -> dict:
     Discover all Git repos across multiple base paths.
     Returns dict mapping repo_name -> {base_path, local_path, gitlab_url, source_branch}
     
-    Applies branch rules from config:
-      - netcore_cpass_whatsapp -> always 'master'
-      - netcore_cpass_rcs -> always 'main'
+    Applies default_branch from base_paths_config for each base path.
     """
     all_repos = {}
     branch_rules = load_base_paths_config()
@@ -242,7 +240,7 @@ def interactive_mode(base_paths: list) -> dict:
     
     # Get repo selection
     print("\n📋 Enter repo names (comma-separated) or numbers:")
-    print("   Example: whatsapp,go-rcs-reporting,wa-payment-polling")
+    print("   Example: service-alpha,service-beta,service-gamma")
     print("   Example: 1,5,12")
     selection = input("   > ").strip()
     
@@ -266,7 +264,7 @@ def interactive_mode(base_paths: list) -> dict:
     print(f"\n   Selected: {', '.join(selected_repos)}")
     
     # Get Jira ID
-    jira_id = input("\n🎫 Jira ID (e.g., CPASS-1234, or press Enter to skip): ").strip()
+    jira_id = input("\n🎫 Jira ID (e.g., PROJ-1234, or press Enter to skip): ").strip()
     
     # Get description
     description = input("\n📝 Task description: ").strip() or "Parallel task"
@@ -436,9 +434,9 @@ def main():
 Examples:
   # Branch-only across 3 repos
   python3 scripts/run_task.py \\
-    --repos whatsapp,wa-payment-polling,go-rcs-reporting \\
-    --jira CPASS-1234 --description "Add health check" \\
-    --source master --branch feature/CPASS-1234-health \\
+    --repos service-alpha,service-beta,service-gamma \\
+    --jira PROJ-1234 --description "Add health check" \\
+    --source master --branch feature/PROJ-1234-health \\
     --base-path /path/to/your/repos --branch-only
 
   # From JSON file
@@ -460,7 +458,7 @@ Examples:
     # Task parameters (CLI mode)
     task_group = parser.add_argument_group("Task Parameters (CLI mode)")
     task_group.add_argument("--repos", type=str, help="Comma-separated repo names")
-    task_group.add_argument("--jira", type=str, default="", help="Jira ticket ID (e.g., CPASS-1234)")
+    task_group.add_argument("--jira", type=str, default="", help="Jira ticket ID (e.g., PROJ-1234)")
     task_group.add_argument("--description", type=str, default="Parallel task", help="Task description")
     task_group.add_argument("--source", type=str, default="", help="Source branch to create from")
     task_group.add_argument("--branch", type=str, default="", help="New branch name to create")

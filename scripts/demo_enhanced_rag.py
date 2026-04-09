@@ -26,7 +26,7 @@ def main():
     # Initialize QueryEngine (automatically uses Enhanced RAG)
     print("\n1️⃣  Initializing QueryEngine with Enhanced RAG...")
     engine = QueryEngine(
-        vector_db_path="./data/vector_db",
+        vector_db_path="./data/qdrant_db",
         use_enhanced_rag=True
     )
     

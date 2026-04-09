@@ -59,11 +59,11 @@ else
 fi
 
 echo ""
-echo "🧪 Optional: chromadb (after pip install -r requirements-ai.txt)..."
-if PYTHONPATH="$ROOT" python3 -c "import chromadb; print('✅ chromadb OK')" 2>/dev/null; then
+echo "🧪 Optional: qdrant-client (RAG / indexing)..."
+if PYTHONPATH="$ROOT" python3 -c "import qdrant_client; print('✅ qdrant-client OK')" 2>/dev/null; then
   :
 else
-  echo "⚠️  chromadb not importable — install requirements-ai.txt for RAG/indexing"
+  echo "⚠️  qdrant-client not importable — pip install -r requirements-query.txt or requirements-ai.txt"
 fi
 
 echo ""

@@ -10,7 +10,7 @@ echo "✅ Python version: $python_version"
 
 # Create directories
 echo "📁 Creating directories..."
-mkdir -p data/vector_db
+mkdir -p data/qdrant_db
 mkdir -p data/embeddings
 mkdir -p data/memory
 mkdir -p data/audit_logs
@@ -26,7 +26,7 @@ pip install -r requirements-ai.txt
 echo ""
 echo "🔍 Checking installations..."
 python3 -c "import langchain; print(f'✅ LangChain: {langchain.__version__}')" 2>/dev/null || echo "❌ LangChain not installed"
-python3 -c "import chromadb; print(f'✅ ChromaDB: {chromadb.__version__}')" 2>/dev/null || echo "❌ ChromaDB not installed"
+python3 -c "import qdrant_client; print('✅ qdrant-client OK')" 2>/dev/null || echo "❌ qdrant-client not installed"
 python3 -c "import langsmith; print(f'✅ LangSmith: {langsmith.__version__}')" 2>/dev/null || echo "❌ LangSmith not installed"
 python3 -c "import openai; print(f'✅ OpenAI: {openai.__version__}')" 2>/dev/null || echo "❌ OpenAI not installed"
 

@@ -48,7 +48,7 @@ print("\n=== Initializing RAG Retriever ===")
 t0 = time.time()
 try:
     from src.ai.rag import RAGRetriever
-    retriever = RAGRetriever(persist_directory="./data/vector_db")
+    retriever = RAGRetriever(persist_directory="./data/qdrant_db")
     init_time = round((time.time() - t0) * 1000)
     unified = "unified" if retriever._unified else "per-repo"
     print(f"  Retriever ready ({unified}) in {init_time}ms\n")
@@ -152,14 +152,24 @@ from src.tools.dependency_scanner import scan_all, scan_repo
 test("Scan all repos", lambda: scan_all().get("repos_scanned", 0) >= 0)
 test("Common deps found", lambda: isinstance(scan_all().get("most_common_deps"), list))
 
-# Test single repo scan
+# Test single repo scan (uses indexing_paths.json / CODE_ATLAS_INDEX_PATHS when set)
 sample_path = None
-for base in ["/path/to/your/repos", "/path/to/your/projects"]:
-    if Path(base).exists():
-        for d in Path(base).iterdir():
+try:
+    from src.ai.indexing_config import load_indexing_base_paths
+
+    _bases = load_indexing_base_paths()
+except Exception:
+    _bases = []
+for base in _bases + ["/path/to/your/repos", "/path/to/your/projects"]:
+    if not Path(base).exists():
+        continue
+    try:
+        for d in sorted(Path(base).iterdir()):
             if d.is_dir() and (d / ".git").exists():
                 sample_path = str(d)
                 break
+    except OSError:
+        continue
     if sample_path:
         break
 

@@ -1,4 +1,22 @@
-# Python
+# =============================================================================
+# What belongs in git vs local-only
+# =============================================================================
+#
+# DO COMMIT (tracked in repo):
+#   - Application source: src/, scripts/, tests/, main.py, requirements*.txt
+#   - Public templates: config/*.example, .env.example, *.service.example
+#   - Docs: README.md, docs/, *.md at repo root
+#   - CI: .github/ (workflows), tooling configs that contain no secrets
+#
+# DO NOT COMMIT (this file ignores):
+#   - Real config: paths, repo lists, tokens, webhooks → use *.example copies
+#   - Vector DB / index artifacts (large; may mirror proprietary code)
+#   - Logs, venvs, editor junk, env files with API keys
+#
+# After clone: copy examples → real config files (see docs/GITHUB_PUBLISH.md).
+# =============================================================================
+
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
@@ -20,57 +38,67 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual environments
+# --- Virtual environments ---
 venv/
 env/
 ENV/
 .venv
 
-# IDE
+# --- Secrets & local env (never push) ---
+.env
+.env.*
+!.env.example
+
+# --- IDE / OS ---
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.DS_Store
+Thumbs.db
 
-# Logs
+# --- Logs & runtime task logs ---
 logs/
 *.log
 work_log.json
 parallel_work_log.json
 
-# Config (keep examples, ignore actual configs with secrets / internal URLs)
+# --- Local config (machine paths, internal repo names, tokens in JSON) ---
+# Keep the matching *.example files in git; copy to the real name locally.
 config/repos_config.json
+config/indexing_paths.json
 config/tasks_config.json
 config/config.json
 config/notifications_config.json
+config/ai_config.json
 code-atlas.service
+
 !config/repos_config.json.example
+!config/indexing_paths.json.example
 !config/tasks_config.json.example
 !config/config.json.example
 !config/notifications_config.json.example
+!config/ai_config.json.example
 !code-atlas.service.example
 
-# Machine-specific / internal names (use *.example; copy locally after clone)
+# --- Internal / host-specific dumps ---
 config/services_mapping.json
 config/skip_repos.json
 !config/services_mapping.json.example
 !config/skip_repos.json.example
 
-# Vector DB + local index state (large; may reflect proprietary code)
+# --- Vector DB, embeddings cache, reindex state (all under data/) ---
+# Includes: data/qdrant_db/, reindex hashes, etc. Rebuild after clone.
 data/
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Test coverage
+# --- Tests & coverage ---
 htmlcov/
 .coverage
 .coverage.*
 .pytest_cache/
 
-# Temporary files
+# --- Temp / backup ---
 *.tmp
 *.bak
 *.backup

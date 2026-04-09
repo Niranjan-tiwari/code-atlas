@@ -115,7 +115,7 @@ def main():
     parser.add_argument("--diff", help="Path to a unified diff / patch file")
     parser.add_argument("--repo", help="Scope analysis to a specific repo")
     parser.add_argument("--max", type=int, default=50, help="Max results (default: 50)")
-    parser.add_argument("--db", default="./data/vector_db", help="Vector DB path")
+    parser.add_argument("--db", default="./data/qdrant_db", help="Vector DB path")
     parser.add_argument("--json", action="store_true", help="Output raw JSON")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show line-level detail")
     args = parser.parse_args()

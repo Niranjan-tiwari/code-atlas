@@ -90,7 +90,7 @@ The system is designed to run with **zero external frameworks**:
 # ChromaDB automatically embeds when you add documents
 collection.add(
     documents=["func handleError(err error) { ... }"],
-    metadatas=[{"repo": "whatsapp", "file": "error.go"}]
+    metadatas=[{"repo": "example-app", "file": "error.go"}]
 )
 # Internally: text → tokenization → transformer → 384-dim vector
 ```
@@ -592,7 +592,7 @@ Final Ranking: A > C > B
 ```
 1. Build Graph During Indexing:
    Nodes:
-   - Files: "whatsapp/error.go"
+   - Files: "example-app/error.go"
    - Functions: "handleError"
    
    Edges:
@@ -619,8 +619,8 @@ Final Ranking: A > C > B
 
 **Graph Structure**:
 ```
-whatsapp/error.go
-├── imports → whatsapp/log.go
+example-app/error.go
+├── imports → example-app/log.go
 ├── defines → handleError()
 │   └── calls → log.Error()
 └── defines → processError()
@@ -669,9 +669,9 @@ Step 2: Generate Architectural Summary
   """
   Analyze these code snippets:
   
-  Snippet 1: whatsapp/error.go - handleError()
-  Snippet 2: whatsapp/log.go - log.Error()
-  Snippet 3: whatsapp/http.go - HTTPErrorHandler()
+  Snippet 1: example-app/error.go - handleError()
+  Snippet 2: example-app/log.go - log.Error()
+  Snippet 3: example-app/http.go - HTTPErrorHandler()
   
   Explain:
   1. How they relate
@@ -1105,12 +1105,12 @@ Transformer Processing:
   ↓
   
 Output Generation (Token by token):
-  "Based" → "on" → "the" → "code" → "in" → "whatsapp/error.go" → ...
+  "Based" → "on" → "the" → "code" → "in" → "example-app/error.go" → ...
   
   ↓
   
 Final Answer:
-  "Based on the code in whatsapp/error.go, error handling works by..."
+  "Based on the code in example-app/error.go, error handling works by..."
 ```
 
 **Output**: Natural language answer with code references

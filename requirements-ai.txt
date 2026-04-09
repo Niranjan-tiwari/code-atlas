@@ -6,10 +6,8 @@ langchain>=0.1.0
 langchain-community>=0.0.20
 langchain-core>=0.1.0
 langchain-openai>=0.0.5
-langchain-chroma>=0.1.0
-
-# Vector Database
-chromadb>=0.4.22
+# Vector database (embedded Qdrant — no separate server)
+qdrant-client>=1.7.0
 
 # Observability (LangChain's tool)
 langsmith>=0.0.80
@@ -58,7 +56,11 @@ sentence-transformers>=2.2.0
 # --- Production RAG Infrastructure ---
 
 # Caching (L2 persistent cache)
-# redis>=5.0.0  # Optional: only needed if Redis is available
+# Optional: Redis (RAG search cache + LLM exact-match cache in llm_query_cache)
+redis>=5.0.0
+# Optional: PostgreSQL semantic cache for LLM answers (pgvector + psycopg2)
+# psycopg2-binary>=2.9.9
+# pgvector>=0.2.5
 
 # Incremental indexing (file watcher)
 watchdog>=3.0.0

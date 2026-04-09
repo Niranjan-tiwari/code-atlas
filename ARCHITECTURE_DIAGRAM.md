@@ -35,7 +35,7 @@
 │ • Simple Task │            │                   │
 │ • 24/7 Agent  │            │  ┌─────────────┐ │
 │ • Scheduled   │            │  │ Vector DB   │ │
-└───────────────┘            │  │ (ChromaDB)  │ │
+└───────────────┘            │  │  (Qdrant)   │ │
                              │  └──────┬──────┘ │
                              │         │        │
                              │  ┌──────▼──────┐ │
@@ -73,7 +73,7 @@
         ▼               ▼               ▼
 ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
 │   REPO 1     │ │   REPO 2     │ │   REPO N     │
-│ (webhook-gen)│ │ (whatsapp)   │ │ (32 repos)   │
+│  (repo A)    │ │  (repo B)    │ │  (repo N)    │
 │              │ │              │ │              │
 │ • Git Ops    │ │ • Git Ops    │ │ • Git Ops    │
 │ • Branch     │ │ • Branch     │ │ • Branch     │
@@ -169,7 +169,7 @@ Task Description: "Add logging to HTTP handlers"
          ▼
 ┌────────────────────┐
 │  Vector DB Search   │
-│  (ChromaDB)        │
+│  (Qdrant)          │
 │  - Find similar     │
 │    code patterns    │
 └──────────┬──────────┘
@@ -227,7 +227,7 @@ Task Description: "Add logging to HTTP handlers"
 - Status tracking
 
 ### 3. **AI System**
-- **Vector DB**: ChromaDB (code indexing)
+- **Vector DB**: Qdrant local (code indexing)
 - **RAG**: Context retrieval
 - **LLM**: Multi-model (GPT-4, Claude, Gemini)
 - **Validation**: Hallucination detection
@@ -298,12 +298,12 @@ code-atlas/
 │
 ├── config/
 │   ├── config.json        # Main config
-│   ├── repos_config.json  # 32 repos
+│   ├── repos_config.json  # Repo list (optional)
 │   ├── tasks_config.json  # Tasks
 │   └── ai_config.json     # AI config
 │
 ├── data/
-│   ├── vector_db/         # ChromaDB data
+│   ├── qdrant_db/         # Qdrant (embedded) vector data
 │   ├── memory/            # LangChain memory
 │   └── embeddings/        # Cached embeddings
 │
@@ -314,7 +314,7 @@ code-atlas/
 │
 └── scripts/
     ├── index_one_repo.py  # Index repo
-    ├── index_all_repos.py # Index all
+    ├── index_all_repos_resume.py  # Bulk index
     └── test_vector_db.py  # Test vector DB
 ```
 
@@ -323,12 +323,12 @@ code-atlas/
 ## 🎯 Key Features
 
 ### ✅ Implemented:
-- Multi-repo management (32 repos)
+- Multi-repo management
 - Parallel execution
 - Git operations automation
 - Notifications (Slack/WhatsApp)
 - Security layer
-- Vector DB (ChromaDB)
+- Vector DB (Qdrant local)
 - Code validation
 - Work modes (simple/24/7)
 - Auto-discovery

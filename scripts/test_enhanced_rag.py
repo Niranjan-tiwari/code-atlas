@@ -201,7 +201,7 @@ def test_enhanced_rag_search():
     
     llm = LLMManager()
     enhanced_rag = EnhancedRAGRetriever(
-        vector_db_path="./data/vector_db",
+        vector_db_path="./data/qdrant_db",
         llm_manager=llm if llm.get_available_providers() else None,
         use_hyde=bool(llm.get_available_providers()),
         use_reranking=True,
@@ -247,7 +247,7 @@ def test_query_engine_integration():
     
     try:
         engine = QueryEngine(
-            vector_db_path="./data/vector_db",
+            vector_db_path="./data/qdrant_db",
             use_enhanced_rag=True
         )
         
