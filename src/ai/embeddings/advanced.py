@@ -32,7 +32,7 @@ class AdvancedEmbeddingModel:
                 - "openai": text-embedding-3-small
                 - "local": sentence-transformers all-MiniLM-L6-v2 (fallback)
         """
-        self.model_name = "local" if model_name == "chromadb" else model_name
+        self.model_name = model_name
         self.model = None
         self.tokenizer = None
         self.dimensions = 384  # Default

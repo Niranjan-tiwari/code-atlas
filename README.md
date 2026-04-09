@@ -4,6 +4,8 @@
 
 **Self-hosting (teams):** clone on your server, configure local paths and secrets, index your clones, run the API — see **[`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md)** (setup, security, every config file and env var, production hardening).
 
+**New here?** Start with **[`docs/DEVELOPER_ONBOARDING.md`](docs/DEVELOPER_ONBOARDING.md)** — how local paths map to Qdrant indexing, and what GitHub/GitLab URLs + tokens would mean for a future “clone and index” flow.
+
 ---
 
 ## About
@@ -11,7 +13,7 @@
 | | |
 |--|--|
 | **What it does** | Index code from multiple clones, **search & ask questions** with retrieval + optional LLM, run **batch Git operations** (branches, MRs) across repos, and expose tools via **HTTP API** (`scripts/start_api.py`). |
-| **Stack** | Python 3.10+, **Qdrant** (embedded), **sentence-transformers**, LangChain-related deps, **httpx**/requests, optional **Ollama** for local models. |
+| **Stack** | Python 3.10+, **Qdrant** (embedded; vectors live under `data/qdrant_db`), **sentence-transformers**, LangChain-related deps, **httpx**/requests, optional **Ollama** for local models. |
 | **Typical use** | Teams with **many repos** who want a **self-hosted** “ask the codebase” stack: index clones, search, optional LLM answers, optional GitLab automation. |
 | **Status** | Open **framework** — copy `config/*.example` + [`.env.example`](.env.example) locally; real configs and `data/` stay **out of git** ([`.gitignore`](.gitignore), [`docs/GITHUB_PUBLISH.md`](docs/GITHUB_PUBLISH.md)). |
 
@@ -461,9 +463,11 @@ PYTHONPATH=. python3 scripts/query_code.py --search "reporting" --list-repos
 
 ## Docs
 
-- **`docs/SELF_HOSTING.md`** — **Start here for teams:** install, security, all config files & env vars, indexing, API, production hardening
+- **`docs/DEVELOPER_ONBOARDING.md`** — **Start here for new developers:** local clones → `indexing_paths` → Qdrant, tokens for private Git (future URL-based flow)
+- **`docs/CONFIG_AND_SCRIPTS.md`** — Which **`config/*.json`** files matter and which **`scripts/`** entry points are for indexing, search, ops, and automation
+- **`docs/SELF_HOSTING.md`** — **Teams / production:** install, security, all config files & env vars, indexing, API, production hardening
 - **`docs/QUERY_CONSOLE_AND_SCALE.md`** — Web Ask UI, LLM answer cache (LRU / Redis / pgvector), scaling notes
 - `docs/GITHUB_PUBLISH.md` — Safe open-source push checklist
 - `ARCHITECTURE_DIAGRAM.md` — System architecture diagrams
-- `docs/COMPLETE_TECHNICAL_GUIDE.md` — Libraries, algorithms, models (some sections predate Qdrant; vector store is Qdrant today)
+- `docs/COMPLETE_TECHNICAL_GUIDE.md` — Libraries, algorithms, models (Qdrant-centric)
 - **`AGENTS.md`** — Short orientation for contributors and automation (optional [`.cursor/rules/`](.cursor/rules/) for Cursor)

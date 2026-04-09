@@ -43,5 +43,5 @@ run_task / workflows → parallel repo operations (config/config.json, repos)
 
 ## Token discipline
 
-- Use **this rule + `AGENTS.md`** instead of re-listing every file.
-- Avoid reading **`docs/COMPLETE_TECHNICAL_GUIDE.md`** unless the user asks for deep reference.
+- Use **this rule + `AGENTS.md`** + **`docs/DEVELOPER_ONBOARDING.md`** for human onboarding (local paths → Qdrant).
+- Optional deep reference: **`docs/COMPLETE_TECHNICAL_GUIDE.md`** (libraries, algorithms, models — large file).

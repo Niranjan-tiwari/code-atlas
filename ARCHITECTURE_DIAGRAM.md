@@ -313,9 +313,11 @@ code-atlas/
 │   └── ai/                # AI logs
 │
 └── scripts/
-    ├── index_one_repo.py  # Index repo
-    ├── index_all_repos_resume.py  # Bulk index
-    └── test_vector_db.py  # Test vector DB
+    ├── index_one_repo.py
+    ├── index_all_repos_resume.py
+    ├── build_unified_index.py
+    ├── query_code.py
+    └── start_api.py
 ```
 
 ---

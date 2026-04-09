@@ -27,4 +27,7 @@ From repo root: `PYTHONPATH=. python3 -m pytest tests/ -q`
 ## Do not
 
 - Paste or commit secrets; use **`.env`** and `*.example` configs only in git.
-- Load **`docs/COMPLETE_TECHNICAL_GUIDE.md`** unless the user needs that depth.
+
+## Optional reading
+
+- **`docs/COMPLETE_TECHNICAL_GUIDE.md`** — libraries, algorithms, models (long reference).

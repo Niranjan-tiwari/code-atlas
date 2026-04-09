@@ -12,7 +12,7 @@ This guide is for **teams** who clone Code Atlas, run it on **their own server**
 4. [First-time install](#4-first-time-install)
 5. [Configuration files](#5-configuration-files)
 6. [Environment variables](#6-environment-variables)
-7. [Feeding your repositories](#7-feeding-your-repositories)
+7. [Feeding your repositories](#7-feeding-your-repositories) (local paths today; [onboarding](DEVELOPER_ONBOARDING.md) for URLs + tokens)
 8. [Indexing pipeline](#8-indexing-pipeline)
 9. [Running the API and dashboard](#9-running-the-api-and-dashboard)
 10. [Production hardening](#10-production-hardening)
@@ -158,13 +158,26 @@ See **`.env.example`** for a paste-friendly list.
 
 ## 7. Feeding your repositories
 
-Code Atlas does **not** clone for you during routine indexing. Standard pattern:
+### 7.1 Supported model today (local paths → Qdrant)
+
+Code Atlas indexes **directories on disk** that contain a **`.git`** folder. The vector store is **Qdrant** (embedded under `data/qdrant_db` by default). Routine indexing does **not** call GitHub/GitLab APIs to clone for you.
+
+Standard pattern:
 
 1. Create one or more **workspace directories** (e.g. `/srv/code/workspaces/{team-a,team-b,…}`).
-2. **`git clone`** each repository under the appropriate workspace (same layout you use today).
+2. **`git clone`** each repository under the appropriate workspace (same layout you use today). For **private** repos, use SSH keys or HTTPS with a **Personal Access Token** in the clone URL (or credential helper) — same as normal Git.
 3. List those workspace roots in **`config/indexing_paths.json`** → **`base_paths`**.
 
 Clones must be **on disk** on the machine that runs the indexer (or on shared storage mounted there). Update remotes and **`git pull`** on your schedule; re-run indexing or incremental reindex as needed.
+
+### 7.2 “Paste a GitHub / GitLab URL” (not built-in yet)
+
+Many users want to **paste a repo URL** and have Code Atlas **clone then index** automatically. That would require:
+
+- A **clone target directory** (cache) on the server.
+- For private repositories: a **GitHub PAT** (`repo` / fine-grained read) or **GitLab token** (`read_repository`, etc.) — **never** committed; use `.env` or a secret manager.
+
+Until a dedicated workflow ships, use **§7.1**: clone with normal Git, then point **`base_paths`** at the parent of your clones. See **[`docs/DEVELOPER_ONBOARDING.md`](DEVELOPER_ONBOARDING.md)** for the full onboarding story and token guidance.
 
 ---
 

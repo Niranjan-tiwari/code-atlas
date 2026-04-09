@@ -6,7 +6,7 @@
 
 1. Read **`.cursor/rules/project-context.mdc`** (always-on architecture).
 2. For `src/ai/**`, indexing, or `scripts/query_code.py`: rules also load **`ai-rag-qdrant.mdc`** when those paths are in scope.
-3. Prefer **`README.md`** + **`docs/SELF_HOSTING.md`** for setup. Do **not** load **`docs/COMPLETE_TECHNICAL_GUIDE.md`** unless the task explicitly needs it (large).
+3. Prefer **`README.md`**, **`docs/DEVELOPER_ONBOARDING.md`**, and **`docs/SELF_HOSTING.md`** for setup. **`docs/COMPLETE_TECHNICAL_GUIDE.md`** is optional (large reference on libraries and algorithms).
 
 ## Commands (repo root)
 
@@ -30,6 +30,10 @@
 - **Qdrant embedded lock:** only one process should hold `data/qdrant_db`; otherwise expect lock errors — check for other `query_code` / indexer / API instances.
 - **Dependencies:** `pip install -r requirements.txt` and **`requirements-ai.txt`** for vector/RAG/LLM stack.
 - **Do not** commit `.env`, real `config/*.json` with secrets, or `data/`.
+
+## Config vs scripts
+
+See **`docs/CONFIG_AND_SCRIPTS.md`** for which `config/*.json` files you need (templates are `*.example`) and which `scripts/` tools are for indexing, search, ops, or GitLab automation.
 
 ## Project skill
 
