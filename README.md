@@ -28,7 +28,7 @@ Copy-paste suggestions live in [`.github/ABOUT-github-ui.md`](.github/ABOUT-gith
 git clone <your-repo-url>
 cd code-atlas   # or your clone folder name
 python3 -m venv .venv && source .venv/bin/activate   # optional, recommended
-pip install -r requirements.txt
+pip install -r requirements.txt        # includes python-dotenv (loads `.env` for scripts/query_code.py)
 pip install -r requirements-ai.txt   # Qdrant, RAG, LLM clients — required for search/index/API
 ```
 
@@ -71,8 +71,10 @@ PYTHONPATH=. python3 -m pytest tests/ -q \
 
 ```bash
 PYTHONPATH=. python3 scripts/start_api.py
-# Browser: http://localhost:8888
+# Browser: http://127.0.0.1:8888/  (or http://localhost:8888)
 ```
+
+Put API keys in **`.env`** (copy from [`.env.example`](.env.example)); `scripts/query_code.py` loads `.env` automatically via `python-dotenv`. The API reads keys from the environment (export or your process manager).
 
 **Publishing a fork?** [`docs/GITHUB_PUBLISH.md`](docs/GITHUB_PUBLISH.md) · **Hosting for your team?** [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md) · **systemd:** `code-atlas.service.example` (daemon), `code-atlas-search-api.service.example` (search API).
 
@@ -100,10 +102,19 @@ python3 scripts/reindex_with_ollama.py --max-chunks 5000   # skip repos with >50
 
 ### Start the API + Web Dashboard
 
+Always use the repo root on `PYTHONPATH` so `src.*` imports resolve:
+
 ```bash
-python3 scripts/start_api.py
-# Open http://localhost:8888 for the web dashboard
+cd /path/to/code-atlas
+PYTHONPATH=. python3 scripts/start_api.py
+# Optional: --host 127.0.0.1 --port 8890
 ```
+
+Open **`http://127.0.0.1:8888/`** — the UI is served from [`src/api/dashboard.py`](src/api/dashboard.py) (no separate frontend build).
+
+**Do not** run **`scripts/query_code.py`** at the same time as **`start_api.py`** against the same **`data/qdrant_db`** (embedded Qdrant allows only one process). Stop the CLI first, or use a different `QDRANT_PATH` / Qdrant server for concurrent use.
+
+**Port already in use:** `fuser -k 8888/tcp` then retry, or `PYTHONPATH=. python3 scripts/start_api.py --port 8890`.
 
 ---
 
@@ -145,12 +156,20 @@ curl -X POST http://localhost:8888/api/query \
 
 ### 3. Web Dashboard
 
-Open `http://localhost:8888` after starting the API. Features:
-- Full-text code search with filters (repo, language, result count)
-- Repository browser
-- Dependency scanner
-- Code duplication finder
-- Error debugger (paste stack trace, get code path + fix suggestions)
+Open **`http://127.0.0.1:8888/`** after starting the API. The dashboard includes:
+
+| Area | What it does |
+|------|----------------|
+| **Search** | Keyword / vector search with repo & language filters (no LLM required beyond embeddings) |
+| **Ask (RAG)** | Natural-language questions via `POST /api/query` — same stack as `query_code.py`; optional **thread tabs** and **browser-local history** (export/import JSON) |
+| **Repos** | Indexed repositories and chunk counts |
+| **Dependencies** | Cross-repo dependency scan |
+| **Duplicates** | Similar code across repos |
+| **Debug error** | Paste a stack trace for analysis |
+
+`POST /api/query` responses may include **`cache_hit`** when [LLM answer caching](docs/QUERY_CONSOLE_AND_SCALE.md) is enabled in `config/ai_config.json` (`llm_query_cache`: in-process LRU, optional Redis exact match, optional PostgreSQL + pgvector semantic cache).
+
+**Health check:** `curl -s http://127.0.0.1:8888/health`
 
 ### 4. Parallel Multi-Repo Git Tasks
 
@@ -320,12 +339,18 @@ tail -f logs/daemon.log    # View logs
 # GitLab MR creation
 export GITLAB_TOKEN=glpat-your-token
 
-# LLM providers (at least one, or use Ollama)
+# LLM providers (at least one, or use Ollama) — also set in .env for local dev
 export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
 export GEMINI_API_KEY=AI...
 
-# Or use Ollama (local, free, no API keys)
+# Optional: PostgreSQL URL for pgvector semantic LLM cache (see ai_config.json llm_query_cache.semantic)
+# export DATABASE_URL=postgresql://user:pass@localhost:5432/dbname
+
+# Hugging Face: higher rate limits when downloading embedding models (optional)
+# export HF_TOKEN=hf_...
+
+# Or use Ollama (local, no cloud API keys)
 ollama serve
 ollama pull codellama
 
@@ -341,11 +366,11 @@ export SLACK_SIGNING_SECRET=...
 | `config/config.json` | Main config: work mode, base path, notifications, security |
 | `config/repos_config.json` | Repository list (auto-discovered) |
 | `config/tasks_config.json` | Task definitions |
-| `config/ai_config.json` | LLM providers, models, fallback chain |
+| `config/ai_config.json` | LLM providers, models, fallback chain, RAG/latency, optional **`llm_query_cache`** (exact + semantic answer cache) |
 
 ### LLM Fallback Chain
 
-Default order: Ollama (local, free) -> OpenAI -> Anthropic -> Gemini. Configure in `config/ai_config.json`.
+Order and providers are defined in **`config/ai_config.json`** (`llm.fallback_chain`, per-provider `enabled` flags). Point at least one provider at a real API key or enable a local **Ollama** model if you use it.
 
 ### Reranker (Env Vars)
 
@@ -368,7 +393,7 @@ FlashRank runs on CPU with no PyTorch; use `ms-marco-MiniLM-L-12-v2` for higher 
 | GET | `/api/repos` | List indexed repos |
 | GET | `/api/duplicates` | Find code duplicates |
 | GET | `/api/deps` | Dependency scanner |
-| POST | `/api/query` | RAG + LLM query |
+| POST | `/api/query` | RAG + LLM query (`cache_hit`, `latency_seconds` when cached) |
 | POST | `/api/review` | AI code review |
 | POST | `/api/migrate` | Migration automator |
 | POST | `/api/refactor` | Refactoring engine |
@@ -388,7 +413,7 @@ code-atlas/
   src/
     core/           # Git worker, models, logger, GitLab API, validator
     ai/             # RAG, LLM providers, embeddings, chunking, search
-    api/            # REST API server, web dashboard
+    api/            # REST API server; embedded HTML UI (`dashboard.py`)
     tools/          # All 12 tools (search, review, migrate, debug, etc.)
     cli/            # CLI interface
     notifications/  # Slack, WhatsApp
@@ -437,6 +462,8 @@ PYTHONPATH=. python3 scripts/query_code.py --search "reporting" --list-repos
 ## Docs
 
 - **`docs/SELF_HOSTING.md`** — **Start here for teams:** install, security, all config files & env vars, indexing, API, production hardening
+- **`docs/QUERY_CONSOLE_AND_SCALE.md`** — Web Ask UI, LLM answer cache (LRU / Redis / pgvector), scaling notes
 - `docs/GITHUB_PUBLISH.md` — Safe open-source push checklist
 - `ARCHITECTURE_DIAGRAM.md` — System architecture diagrams
 - `docs/COMPLETE_TECHNICAL_GUIDE.md` — Libraries, algorithms, models (some sections predate Qdrant; vector store is Qdrant today)
+- **`AGENTS.md`** — Short orientation for contributors and automation (optional [`.cursor/rules/`](.cursor/rules/) for Cursor)
